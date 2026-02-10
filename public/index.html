@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alfred Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      background:
+        radial-gradient(1200px 800px at 20% 10%, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.00) 60%),
+        radial-gradient(1000px 700px at 80% 20%, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.00) 55%),
+        linear-gradient(135deg, #0a0f1c 0%, #111a2e 40%, #0f1220 100%);
+      color: #e9eefc;
+      padding: 1.25rem;
+      min-height: 100vh;
+    }
+    .container { max-width: 1280px; margin: 0 auto; }
+    .topbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    h1 { font-size: 1.1rem; letter-spacing: 0.2px; }
+    .meta {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      opacity: 0.9;
+      font-size: 0.9rem;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.14);
+      backdrop-filter: blur(10px);
+    }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.06));
+      backdrop-filter: blur(12px);
+      border-radius: 16px;
+      padding: 14px 14px 12px;
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+      overflow: hidden;
+    }
+    .card h2 { font-size: 0.95rem; margin-bottom: 10px; opacity: 0.95; }
+    .card .sub { font-size: 0.8rem; opacity: 0.75; margin-top: -6px; margin-bottom: 10px; }
+    .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin: 8px 0; }
+    .row .k { opacity: 0.8; }
+    .row .v { font-weight: 650; letter-spacing: 0.1px; }
+    .tiny { font-size: 0.82rem; opacity: 0.85; }
+    .list { display: grid; gap: 8px; }
+    .item {
+      background: rgba(255,255,255,0.05);
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+    .priority-critical { border-left: 4px solid #ff4757; }
+    .priority-high { border-left: 4px solid #ffa502; }
+    .priority-medium { border-left: 4px solid #2ed573; }
+    .priority-low { border-left: 4px solid #70a1ff; }
+    .progress-bar {
+      background: rgba(255,255,255,0.14);
+      height: 10px;
+      border-radius: 999px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      background: linear-gradient(90deg, #2ed573, #12cbc4);
+      height: 100%;
+      transition: width 0.3s;
+    }
+    .status-online { color: #2ed573; }
+    .status-offline { color: #ff4757; }
+    .muted { opacity: 0.75; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+    .badge.good { border-color: rgba(46, 213, 115, 0.35); }
+    .badge.warn { border-color: rgba(255, 165, 2, 0.35); }
+    .badge.bad { border-color: rgba(255, 71, 87, 0.35); }
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    details summary {
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+    }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] summary { background: rgba(255,255,255,0.06); }
+    .last-update {
+      text-align: center;
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      opacity: 0.7;
+    }
+    @media (max-width: 600px) {
+      body { padding: 0.9rem; }
+      .grid { grid-template-columns: 1fr; }
+      .split { grid-template-columns: 1fr; }
+    }
+
+    /* Grid spans */
+    .span-12 { grid-column: span 12; }
+    .span-8 { grid-column: span 8; }
+    .span-7 { grid-column: span 7; }
+    .span-6 { grid-column: span 6; }
+    .span-5 { grid-column: span 5; }
+    .span-4 { grid-column: span 4; }
+    .span-3 { grid-column: span 3; }
+    @media (max-width: 980px) {
+      .span-8, .span-7, .span-6, .span-5, .span-4, .span-3 { grid-column: span 12; }
+    }
+  </style>
+</head>
+  <body>
+  <div class="container">
+    <div class="topbar">
+      <h1>Alfred Dashboard</h1>
+      <div class="meta">
+        <span id="pill-vitality" class="pill">Vitality: <span class="v">...</span></span>
+        <span id="pill-xp" class="pill">XP: <span class="v">...</span></span>
+        <span id="pill-inbox" class="pill">Inbox: <span class="v">...</span></span>
+        <span id="pill-systems" class="pill">Systems: <span class="v">...</span></span>
+      </div>
+    </div>
+
+    <div id="loading" class="pill">Loading…</div>
+    <div id="dashboard" class="grid" style="display:none;"></div>
+    <div id="last-update" class="last-update"></div>
+  </div>
+
+  <script>
+    async function loadData() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        render(data);
+      } catch (e) {
+        document.getElementById('loading').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function fmtDate(ts) {
+      if (!ts) return 'N/A';
+      try { return new Date(ts).toLocaleString(); } catch { return String(ts); }
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function vitalityBadge(v) {
+      if (!v || v.score == null) return `<span class="badge">Vitality: N/A</span>`;
+      const band = (v.band || '').toLowerCase();
+      const cls = band === 'push' ? 'good' : band === 'recover' ? 'bad' : 'warn';
+      return `<span class="badge ${cls}">Vitality: <strong>${v.score}</strong> <span class="muted">(${escapeHtml(v.band || 'unknown')})</span></span>`;
+    }
+
+    function render(data) {
+      document.getElementById('loading').style.display = 'none';
+      const container = document.getElementById('dashboard');
+      container.style.display = 'grid';
+      
+      const player = data.player || {};
+      const stats = data.stats || {};
+      const quests = data.quests || {};
+      const tasks = data.tasks || {};
+      const systems = data.systems || {};
+      const inbox = data.inbox || {};
+      const vitality = data.vitality || null;
+      const events = data.events || {};
+      const openclaw = data.openclaw || {};
+      const overview = data.overview || {};
+
+      // top pills
+      const pillVitality = document.querySelector('#pill-vitality .v');
+      pillVitality.textContent = vitality && vitality.score != null ? `${vitality.score} (${vitality.band || 'unknown'})` : 'N/A';
+
+      const pillXp = document.querySelector('#pill-xp .v');
+      pillXp.textContent = `${player.totalXP ?? 0} / ${player.xpToNext ?? 0}`;
+
+      const pillInbox = document.querySelector('#pill-inbox .v');
+      pillInbox.textContent = inbox.pending != null ? `${inbox.pending} pending` : 'N/A';
+
+      const sysOnline = Object.values(systems).filter(Boolean).length;
+      const sysTotal = Object.keys(systems).length;
+      document.querySelector('#pill-systems .v').textContent = `${sysOnline}/${sysTotal} online`;
+      
+      container.innerHTML = `
+        <div class="card span-7">
+          <h2>🧭 Overview</h2>
+          <div class="sub muted">What matters now (fast glance)</div>
+          <div class="split">
+            <div>
+              <div class="row"><span class="k">Level</span><span class="v">${player.level || 1} <span class="muted">(${escapeHtml(player.title || 'Novice')})</span></span></div>
+              <div class="row"><span class="k">XP</span><span class="v">${player.totalXP || 0} / ${player.xpToNext || 0}</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width: ${Math.min(100, ((player.totalXP || 0) / (player.xpToNext || 1)) * 100)}%"></div></div>
+              <div class="row"><span class="k">Streak</span><span class="v">${player.streak || 0} days</span></div>
+            </div>
+            <div>
+              <div class="row"><span class="k">Open Tasks</span><span class="v">${overview.openTasks ?? (tasks.total || 0)}</span></div>
+              <div class="row"><span class="k">Inbox Pending</span><span class="v">${overview.inboxPending ?? inbox.pending ?? 'N/A'}</span></div>
+              <div class="row"><span class="k">Quests Active</span><span class="v">${quests.active || 0}</span></div>
+              <div class="tiny" style="margin-top:8px">${vitalityBadge(vitality)}</div>
+            </div>
+          </div>
+
+          <details style="margin-top:10px">
+            <summary>
+              <span>Milestones</span>
+              <span class="badge">${(overview.milestones || []).length}</span>
+            </summary>
+            <div class="list" style="margin-top:10px">
+              ${(overview.milestones || []).slice(0, 10).map(m => `
+                <div class="item">
+                  <div class="row"><span class="v">${escapeHtml(m.name || '—')}</span><span class="badge">${escapeHtml(m.type || 'milestone')}</span></div>
+                  <div class="tiny muted">${m.deadline ? 'Due: ' + escapeHtml(m.deadline) : (m.dueDate ? 'Due: ' + escapeHtml(m.dueDate) : (m.date ? 'Date: ' + escapeHtml(m.date) : ''))}</div>
+                </div>
+              `).join('') || `<div class="tiny muted">No milestones</div>`}
+            </div>
+          </details>
+        </div>
+
+        <div class="card span-5">
+          <h2>💓 Vitality</h2>
+          <div class="sub muted">Drivers + band (from weekly snapshot)</div>
+          ${vitality ? `
+            <div class="row"><span class="k">Score</span><span class="v">${vitality.score} <span class="muted">(${escapeHtml(vitality.band)})</span></span></div>
+            <div class="split">
+              <div class="item">
+                <div class="row"><span class="k">Sleep</span><span class="v">${vitality.drivers?.sleep ?? '—'}</span></div>
+                <div class="row"><span class="k">Exercise</span><span class="v">${vitality.drivers?.exercise ?? '—'}</span></div>
+              </div>
+              <div class="item">
+                <div class="row"><span class="k">Nutrition</span><span class="v">${vitality.drivers?.nutrition ?? '—'}</span></div>
+                <div class="row"><span class="k">Load</span><span class="v">${vitality.drivers?.load ?? '—'}</span></div>
+              </div>
+            </div>
+            <details style="margin-top:10px">
+              <summary><span>Breakdown</span><span class="badge mono">driver_breakdown</span></summary>
+              <div class="tiny muted" style="margin-top:10px; white-space: pre-wrap">${escapeHtml(JSON.stringify(vitality.driver_breakdown || {}, null, 2))}</div>
+            </details>
+          ` : `<div class="tiny muted">No vitality snapshot found yet.</div>`}
+        </div>
+
+        <div class="card span-6">
+          <h2>🎯 Quests</h2>
+          <div class="sub muted">Active quests (priority + deadline)</div>
+          <div class="list">
+            ${(quests.list || []).map(q => `
+              <div class="item priority-${String(q.priority || '').toLowerCase()}">
+                <div class="row">
+                  <span class="v">${escapeHtml(q.name)}</span>
+                  <span class="badge">${escapeHtml(q.status || 'unknown')}</span>
+                </div>
+                <div class="tiny muted">${q.deadline ? 'Due: ' + escapeHtml(q.deadline) : 'Due: TBD'} · ${q.progress || 0}%</div>
+                <div class="progress-bar"><div class="progress-fill" style="width: ${q.progress || 0}%"></div></div>
+              </div>
+            `).join('') || `<div class="tiny muted">No active quests</div>`}
+          </div>
+        </div>
+
+        <div class="card span-6">
+          <h2>📋 Tasks</h2>
+          <div class="sub muted">Top tasks (critical/high first)</div>
+          <div class="row tiny">
+            <span style="color:#ff4757">● Critical: <strong>${tasks.critical || 0}</strong></span>
+            <span style="color:#ffa502">● High: <strong>${tasks.high || 0}</strong></span>
+            <span class="muted">Total: <strong>${tasks.total || 0}</strong></span>
+          </div>
+          <div class="list">
+            ${(tasks.list || []).map(t => `
+              <div class="item priority-${String(t.priority || '').toLowerCase()}">
+                <div class="row">
+                  <span class="v">${escapeHtml(t.title)}</span>
+                  <span class="badge">${escapeHtml(t.status || 'unknown')}</span>
+                </div>
+                <div class="tiny muted">${t.dueDate ? 'Due: ' + escapeHtml(t.dueDate) : 'Due: TBD'}</div>
+              </div>
+            `).join('') || `<div class="tiny muted">No active tasks</div>`}
+          </div>
+        </div>
+
+        <div class="card span-4">
+          <h2>📥 Capture Inbox</h2>
+          <div class="sub muted">Unprocessed items to review</div>
+          <div class="row"><span class="k">Pending</span><span class="v">${inbox.pending ?? 'N/A'}</span></div>
+          <div class="row"><span class="k">Total Captured</span><span class="v">${inbox.totalCaptured ?? 'N/A'}</span></div>
+          <div class="list" style="margin-top:8px">
+            ${(inbox.list || []).map(i => `
+              <div class="item priority-${String(i.priority || '').toLowerCase()}">
+                <div class="row">
+                  <span class="badge mono">${escapeHtml(i.type || 'item')}</span>
+                  <span class="tiny muted">${escapeHtml(i.capturedAt || '')}</span>
+                </div>
+                <div class="tiny">${escapeHtml(i.content || '')}</div>
+                ${(i.tags && i.tags.length) ? `<div class="tiny muted" style="margin-top:6px">${i.tags.map(t => `#${escapeHtml(t)}`).join(' ')}</div>` : ''}
+              </div>
+            `).join('') || `<div class="tiny muted">No pending inbox items</div>`}
+          </div>
+        </div>
+
+        <div class="card span-8">
+          <h2>🧾 Recent Events</h2>
+          <div class="sub muted">Last ${events.count || 0} captured events (from JSONL)</div>
+          <details open>
+            <summary><span>${escapeHtml(events.date || '')}</span><span class="badge">${events.count || 0}</span></summary>
+            <div class="list" style="margin-top:10px">
+              ${(events.recent || []).slice().reverse().slice(0, 20).map(ev => `
+                <div class="item">
+                  <div class="row">
+                    <span class="badge mono">${escapeHtml(ev.domain || '—')}</span>
+                    <span class="badge mono">${escapeHtml(ev.type || '—')}</span>
+                    <span class="tiny muted">${escapeHtml(ev.source || '')}</span>
+                  </div>
+                  <div class="tiny muted">${fmtDate(ev.ts)}</div>
+                  <div class="tiny" style="margin-top:6px">${escapeHtml(ev.text || '')}</div>
+                </div>
+              `).join('') || `<div class="tiny muted">No events found for today.</div>`}
+            </div>
+          </details>
+        </div>
+
+        <div class="card span-4">
+          <h2>🔧 Systems</h2>
+          <div class="sub muted">Local credentials presence checks</div>
+          ${(Object.entries(systems).map(([name, online]) => `
+            <div class="row">
+              <span class="k">${escapeHtml(name)}</span>
+              <span class="${online ? 'status-online' : 'status-offline'} v">
+                ${online ? 'Online' : 'Offline'}
+              </span>
+            </div>
+          `).join('')) || `<div class="tiny muted">No systems data</div>`}
+        </div>
+
+        <div class="card span-12">
+          <h2>🧠 OpenClaw</h2>
+          <div class="sub muted">Live agent sessions + cron (best-effort; may be null if CLI times out)</div>
+          <details>
+            <summary><span>Sessions</span><span class="badge">${openclaw.sessions?.count ?? 'N/A'}</span></summary>
+            <div class="tiny muted mono" style="margin-top:10px; white-space: pre-wrap">${escapeHtml(JSON.stringify(openclaw.sessions || {}, null, 2))}</div>
+          </details>
+          <details style="margin-top:10px">
+            <summary><span>Crons</span><span class="badge">${openclaw.crons?.count ?? 'N/A'}</span></summary>
+            <div class="tiny muted mono" style="margin-top:10px; white-space: pre-wrap">${escapeHtml(JSON.stringify(openclaw.crons || {}, null, 2))}</div>
+          </details>
+        </div>
+      `;
+      
+      document.getElementById('last-update').textContent = 
+        'Last update: ' + new Date(data.timestamp).toLocaleString();
+    }
+
+    loadData();
+    setInterval(loadData, 60000); // Refresh every minute
+  </script>
+</body>
+</html>
