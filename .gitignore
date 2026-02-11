@@ -21,7 +21,7 @@ dist/
 legacy/
 
 # keep the old UI around locally, but don't track it
-apps/chatui/chatui-legacy-*/
+chatui/chatui-legacy-*/
 
 # local multi-agent worktrees
 .worktrees/

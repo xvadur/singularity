@@ -4,8 +4,9 @@ Jarvis/Alfred console.
 
 ## Apps
 
-- `apps/alfred`: Express server for `alfred.xvadur.com` (dashboard at `/`, API under `/api/*`, chat at `/chat`)
-- `apps/chatui`: React UI (built and served by `apps/alfred` at `/chat`)
+- `alfred`: Express server for `alfred.xvadur.com` (dashboard at `/`, API under `/api/*`, chat at `/chat`)
+- `chatui`: React UI (built and served by `alfred` at `/chat`)
+- `legacy`: archived/recovered legacy ChatUI variants
 
 ## Current Status
 
@@ -15,8 +16,7 @@ Jarvis/Alfred console.
 - New dashboard links:
   - `/chat` for new console UI
   - `/legacy` for legacy UI proxy
-- WorkQuest (XP/quests/streak/focus) is already started in `apps/chatui/src/App.tsx`
-- Detailed multi-agent split: `docs/agent-alignment.md`
+- WorkQuest (XP/quests/streak/focus) is already started in `chatui/src/App.tsx`
 
 ## Dev
 

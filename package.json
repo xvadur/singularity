@@ -2,7 +2,8 @@
   "name": "singularity",
   "private": true,
   "workspaces": [
-    "apps/*"
+    "alfred",
+    "chatui"
   ],
   "scripts": {
     "dev": "npm run dev:all",

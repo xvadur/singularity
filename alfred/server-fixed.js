@@ -710,7 +710,7 @@ app.get('/health', (req, res) => {
 // Static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Chat UI (built by apps/chatui)
+// Chat UI (built by chatui workspace)
 app.use('/chat', express.static(CHAT_DIST_DIR));
 
 const chatIndexPath = path.join(CHAT_DIST_DIR, 'index.html');
