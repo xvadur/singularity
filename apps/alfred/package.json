@@ -1,0 +1,33 @@
+{
+  "name": "@xvadur/alfred",
+  "version": "0.1.0",
+  "description": "Alfred web console (dashboard + capture + chat) for Jarvis/OpenClaw workspace.",
+  "main": "server-fixed.js",
+  "scripts": {
+    "start": "node server-fixed.js",
+    "dev": "node server-fixed.js"
+  },
+  "dependencies": {
+    "express": "^4.22.1"
+  },
+  "keywords": [
+    "monitoring",
+    "dashboard",
+    "web",
+    "express",
+    "mobile-responsive",
+    "openclaw",
+    "real-time",
+    "sessions",
+    "task-management"
+  ],
+  "author": "OpenClaw Community",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openclaw/clawhub"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

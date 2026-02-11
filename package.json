@@ -1,0 +1,21 @@
+{
+  "name": "singularity",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:all",
+    "dev:alfred": "PORT=3031 npm -w @xvadur/alfred run dev",
+    "dev:chat": "ALFRED_PORT=3031 npm -w @xvadur/chatui run dev",
+    "dev:all": "concurrently -n alfred,chat -c green,blue \"npm run dev:alfred\" \"npm run dev:chat\"",
+    "build": "npm -w @xvadur/chatui run build",
+    "start": "npm -w @xvadur/alfred run start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
