@@ -3,7 +3,7 @@ import { ChatThread, Message, Role, CalendarEvent, DashboardView } from './types
 import LeftSidebar from './components/LeftSidebar';
 import RightSidebar from './components/RightSidebar';
 import ChatArea from './components/ChatArea';
-import { sendMessageToGemini } from './services/geminiService';
+import { captureMessageToJarvis, sendMessageToGemini } from './services/geminiService';
 import { AGENTS } from './constants';
 
 const App: React.FC = () => {
@@ -53,7 +53,7 @@ const App: React.FC = () => {
 
   const activeThread = threads.find(t => t.id === activeThreadId);
 
-  const handleSendMessage = async (text: string, agentId: string) => {
+  const handleSendMessage = async (text: string, agentId: string, triggerJarvisNow: boolean) => {
     if (!activeThreadId) return;
 
     const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
@@ -68,18 +68,24 @@ const App: React.FC = () => {
     // Optimistic update
     updateThreadMessages(activeThreadId, newUserMessage);
     setCurrentInput('');
-    setIsTyping(true);
+    setIsTyping(triggerJarvisNow);
 
     // Get Agent Instructions
     const agent = AGENTS.find(a => a.id === agentId) || AGENTS[0];
+    const captureStatusText = await captureMessageToJarvis(text, activeThreadId, agentId);
 
-    // API Call
-    const responseText = await sendMessageToGemini(
-      activeThread?.messages || [], 
-      text, 
-      agent.systemInstruction,
-      activeThreadId
-    );
+    let responseText = captureStatusText;
+    if (triggerJarvisNow) {
+      const jarvisReply = await sendMessageToGemini(
+        activeThread?.messages || [],
+        text,
+        agent.systemInstruction,
+        activeThreadId
+      );
+      responseText = captureStatusText.startsWith('Error:')
+        ? `${captureStatusText}\n\nJarvis: ${jarvisReply}`
+        : jarvisReply;
+    }
 
     const newBotMessage: Message = {
       id: (Date.now() + 1).toString(),

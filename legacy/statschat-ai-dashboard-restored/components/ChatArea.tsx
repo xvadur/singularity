@@ -6,7 +6,7 @@ import { AGENTS } from '../constants';
 interface ChatAreaProps {
   activeThreadId: string | null;
   messages: Message[];
-  onSendMessage: (text: string, agentId: string) => void;
+  onSendMessage: (text: string, agentId: string, triggerJarvisNow: boolean) => Promise<void> | void;
   isTyping: boolean;
   onInputChange: (text: string) => void;
   currentInput: string;
@@ -22,6 +22,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string>(AGENTS[0].id);
+  const [jarvisArmed, setJarvisArmed] = useState(false);
 
   const selectedAgent = AGENTS.find(a => a.id === selectedAgentId) || AGENTS[0];
 
@@ -40,9 +41,11 @@ const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (currentInput.trim() && !isTyping) {
-      onSendMessage(currentInput, selectedAgentId);
+      const triggerNow = jarvisArmed;
+      if (triggerNow) setJarvisArmed(false); // one-shot toggle
+      await onSendMessage(currentInput, selectedAgentId, triggerNow);
     }
   };
 
@@ -67,18 +70,38 @@ const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
         
         <div className="flex items-center gap-3 bg-slate-800/60 py-1.5 px-3 rounded-lg border border-slate-700">
-          <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Agent:</span>
-          <select 
-            value={selectedAgentId}
-            onChange={(e) => setSelectedAgentId(e.target.value)}
-            className="bg-transparent text-sm text-white font-semibold focus:outline-none cursor-pointer min-w-[120px]"
-          >
-            {AGENTS.map(agent => (
-              <option key={agent.id} value={agent.id} className="bg-slate-800 text-white">
-                {agent.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Agent:</span>
+            <select 
+              value={selectedAgentId}
+              onChange={(e) => setSelectedAgentId(e.target.value)}
+              className="bg-transparent text-sm text-white font-semibold focus:outline-none cursor-pointer min-w-[120px]"
+            >
+              {AGENTS.map(agent => (
+                <option key={agent.id} value={agent.id} className="bg-slate-800 text-white">
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="w-px h-6 bg-slate-600/70" />
+
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Jarvis</span>
+            <span className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${jarvisArmed ? 'bg-emerald-500/80' : 'bg-slate-600'}`}>
+              <input
+                type="checkbox"
+                checked={jarvisArmed}
+                onChange={(e) => setJarvisArmed(e.target.checked)}
+                className="sr-only"
+              />
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${jarvisArmed ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </span>
+            <span className={`text-[11px] font-semibold ${jarvisArmed ? 'text-emerald-300' : 'text-slate-400'}`}>
+              {jarvisArmed ? 'ON (next)' : 'OFF'}
+            </span>
+          </label>
         </div>
       </div>
 
@@ -161,7 +184,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({
               disabled={!currentInput.trim() || isTyping}
               className="bg-[#9f1239] hover:bg-[#be123c] disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-5 rounded-lg shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center gap-2 border border-white/10"
             >
-               <span className="font-bold text-xs tracking-wide">SEND</span>
+               <span className="font-bold text-xs tracking-wide">{jarvisArmed ? 'SEND + JARVIS' : 'SEND'}</span>
                <Send size={16} />
             </button>
           </div>
