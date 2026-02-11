@@ -3,7 +3,9 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const http = require('http');
+const crypto = require('crypto');
+const { execSync, spawnSync } = require('child_process');
 
 const app = express();
 const PORT = Number.parseInt(process.env.PORT || '3030', 10);
@@ -15,7 +17,19 @@ const WORKSPACE = path.join(process.env.HOME, '.openclaw', 'workspace');
 const DATA_DIR = path.join(WORKSPACE, 'data');
 const CAPTURE_INBOX_PATH = path.join(DATA_DIR, 'system', 'capture', 'inbox.json');
 const CHAT_DIST_DIR = path.join(__dirname, '..', 'chatui', 'dist');
+const LEGACY_UI_URL = process.env.LEGACY_UI_URL || 'http://127.0.0.1:5175';
 const CAPTURE_TOKEN = process.env.CAPTURE_TOKEN || '';
+const OPENCLAW_BIN = process.env.OPENCLAW_BIN || '';
+const OPENCLAW_MJS = process.env.OPENCLAW_MJS || path.join(process.env.HOME || '', 'OPENCLAW', 'openclaw.mjs');
+const OPENCLAW_DEFAULT_SESSION_KEY = process.env.OPENCLAW_SESSION_KEY || 'agent:main:main';
+const OPENCLAW_TIMEOUT_MS = Number.parseInt(process.env.OPENCLAW_GATEWAY_TIMEOUT_MS || '90000', 10);
+const LEGACY_TARGET = (() => {
+  try {
+    return new URL(LEGACY_UI_URL);
+  } catch {
+    return new URL('http://127.0.0.1:5175');
+  }
+})();
 
 // Cache configuration
 const CACHE_TTL_MS = 30000;
@@ -67,6 +81,10 @@ function incrementCaptureStats(doc, newItem) {
 
   const type = String(newItem?.type || 'note');
   doc.captureStats.byType[type] = Number(doc.captureStats.byType[type] || 0) + 1;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function safeReadText(filePath, maxBytes) {
@@ -172,6 +190,113 @@ function safeExecJson(cmd, timeoutMs) {
   }
 }
 
+const OPENCLAW_COMMAND = (() => {
+  if (OPENCLAW_BIN) {
+    return { cmd: OPENCLAW_BIN, baseArgs: [] };
+  }
+  if (fs.existsSync(OPENCLAW_MJS)) {
+    return { cmd: process.execPath || 'node', baseArgs: [OPENCLAW_MJS] };
+  }
+  return { cmd: 'openclaw', baseArgs: [] };
+})();
+
+function openclawGatewayCall(method, params, timeoutMs) {
+  const safeTimeout = Math.max(1000, Number(timeoutMs || 10000));
+  const args = [
+    ...OPENCLAW_COMMAND.baseArgs,
+    'gateway',
+    'call',
+    method,
+    '--json',
+    '--timeout',
+    String(safeTimeout),
+    '--params',
+    JSON.stringify(params || {})
+  ];
+
+  const result = spawnSync(OPENCLAW_COMMAND.cmd, args, {
+    encoding: 'utf8',
+    timeout: safeTimeout + 2000,
+    maxBuffer: 8 * 1024 * 1024
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (result.status !== 0) {
+    const stderr = String(result.stderr || '').trim();
+    const stdout = String(result.stdout || '').trim();
+    throw new Error(stderr || stdout || `openclaw gateway call failed (${result.status})`);
+  }
+
+  const stdout = String(result.stdout || '').trim();
+  if (!stdout) return null;
+  return JSON.parse(stdout);
+}
+
+function safeGatewayCall(method, params, timeoutMs) {
+  try {
+    return openclawGatewayCall(method, params, timeoutMs);
+  } catch (error) {
+    console.warn(`Gateway call failed for ${method}:`, error.message);
+    return null;
+  }
+}
+
+function sanitizeThreadId(raw) {
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+function resolveJarvisSessionKey(inputSessionKey, threadId) {
+  const explicit = String(inputSessionKey || '').trim();
+  if (explicit && /^[a-zA-Z0-9:_-]{1,180}$/.test(explicit)) {
+    return explicit;
+  }
+
+  const cleanedThread = sanitizeThreadId(threadId);
+  if (cleanedThread) {
+    return `agent:main:webchat:${cleanedThread}`;
+  }
+
+  return OPENCLAW_DEFAULT_SESSION_KEY;
+}
+
+function extractTextFromContent(content) {
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter(part => part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string')
+    .map(part => part.text.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function extractLatestAssistantText(messages, startIndex) {
+  if (!Array.isArray(messages) || !messages.length) return '';
+
+  const safeStart = Math.max(0, Number(startIndex || 0));
+  for (let i = messages.length - 1; i >= safeStart; i -= 1) {
+    const msg = messages[i];
+    if (msg?.role !== 'assistant') continue;
+    const text = extractTextFromContent(msg.content);
+    if (text) return text;
+  }
+
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg?.role !== 'assistant') continue;
+    const text = extractTextFromContent(msg.content);
+    if (text) return text;
+  }
+
+  return '';
+}
+
 // Fetch fresh data from workspace files
 async function fetchStatusData() {
   try {
@@ -268,8 +393,12 @@ async function fetchStatusData() {
 
     const eventsRecent = readEventsTailForDate(today, 50);
 
-    const openclawSessions = safeExecJson('openclaw sessions list --json', 4000);
-    const openclawCrons = safeExecJson('openclaw cron list --json', 4000);
+    const openclawSessions =
+      safeGatewayCall('sessions.list', {}, 6000) ||
+      safeExecJson('openclaw sessions list --json', 4000);
+    const openclawCrons =
+      safeGatewayCall('cron.list', {}, 6000) ||
+      safeExecJson('openclaw cron list --json', 4000);
     
     return {
       timestamp: new Date().toISOString(),
@@ -315,7 +444,8 @@ async function fetchStatusData() {
           content: i.content,
           capturedAt: i.capturedAt,
           priority: i.priority,
-          tags: i.tags || []
+          tags: i.tags || [],
+          meta: (i.meta && typeof i.meta === 'object') ? i.meta : null
         }))
       },
       vitality: vitality ? {
@@ -439,6 +569,9 @@ app.post('/api/capture', (req, res) => {
     const tags = Array.isArray(body.tags)
       ? body.tags.map(String).map(t => t.trim()).filter(Boolean).slice(0, 24)
       : [];
+    const meta = (body.meta && typeof body.meta === 'object' && !Array.isArray(body.meta))
+      ? body.meta
+      : null;
 
     const nowIso = new Date().toISOString();
     const id = `capture-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
@@ -451,7 +584,8 @@ app.post('/api/capture', (req, res) => {
       capturedAt: nowIso,
       processed: false,
       priority,
-      tags
+      tags,
+      meta
     };
 
     let doc = readJSON(CAPTURE_INBOX_PATH);
@@ -479,6 +613,96 @@ app.post('/api/capture', (req, res) => {
   }
 });
 
+app.post('/api/jarvis/chat', (req, res) => {
+  try {
+    const body = (req && req.body && typeof req.body === 'object') ? req.body : {};
+    const message = (typeof body.message === 'string') ? body.message.trim() : '';
+    if (!message) {
+      return res.status(400).json({ ok: false, error: 'message is required' });
+    }
+
+    const sessionKey = resolveJarvisSessionKey(body.sessionKey, body.threadId);
+    const idempotencyKey = (typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim())
+      ? body.idempotencyKey.trim()
+      : crypto.randomUUID();
+    const timeoutMs = clamp(Number(body.timeoutMs || OPENCLAW_TIMEOUT_MS), 10_000, 180_000);
+
+    const before = safeGatewayCall('chat.history', { sessionKey }, 10_000);
+    const beforeMessages = Array.isArray(before?.messages) ? before.messages : [];
+    const beforeCount = beforeMessages.length;
+
+    const sendResult = openclawGatewayCall(
+      'chat.send',
+      { sessionKey, message, idempotencyKey },
+      Math.min(timeoutMs, OPENCLAW_TIMEOUT_MS)
+    );
+    const runId = sendResult?.runId || null;
+
+    if (runId) {
+      openclawGatewayCall(
+        'agent.wait',
+        { runId },
+        Math.min(timeoutMs, OPENCLAW_TIMEOUT_MS)
+      );
+    }
+
+    const after = openclawGatewayCall('chat.history', { sessionKey }, 15_000);
+    const afterMessages = Array.isArray(after?.messages) ? after.messages : [];
+    const replyText = extractLatestAssistantText(afterMessages, beforeCount);
+
+    return res.json({
+      ok: true,
+      sessionKey,
+      runId,
+      beforeCount,
+      afterCount: afterMessages.length,
+      replyText: replyText || 'No assistant text response returned.'
+    });
+  } catch (error) {
+    console.error('Jarvis chat error:', error);
+    return res.status(502).json({
+      ok: false,
+      error: error.message || 'jarvis gateway failed',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.get('/api/jarvis/history', (req, res) => {
+  try {
+    const query = (req && req.query && typeof req.query === 'object') ? req.query : {};
+    const sessionKey = resolveJarvisSessionKey(query.sessionKey, query.threadId);
+    const limit = clamp(Number(query.limit || 120), 10, 500);
+
+    const history = openclawGatewayCall('chat.history', { sessionKey }, 15_000);
+    const rows = Array.isArray(history?.messages) ? history.messages : [];
+
+    const messages = rows
+      .map((msg, idx) => ({
+        id: msg?.id || `${sessionKey}-${idx}`,
+        role: msg?.role || 'unknown',
+        text: extractTextFromContent(msg?.content),
+        timestamp: msg?.timestamp || null
+      }))
+      .filter(msg => msg.role && msg.text)
+      .slice(-limit);
+
+    return res.json({
+      ok: true,
+      sessionKey,
+      count: messages.length,
+      messages
+    });
+  } catch (error) {
+    console.error('Jarvis history error:', error);
+    return res.status(502).json({
+      ok: false,
+      error: error.message || 'jarvis history failed',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.json({ ok: true, timestamp: new Date().toISOString() });
 });
@@ -497,6 +721,106 @@ app.get('/chat', (req, res) => {
 app.get('/chat/*', (req, res) => {
   if (fs.existsSync(chatIndexPath)) return res.sendFile(chatIndexPath);
   return res.status(503).send('Chat UI is not built yet. Run: npm run build');
+});
+
+app.get('/legacy/status', (req, res) => {
+  res.status(200).send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Legacy UI</title>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; padding: 24px; background: #0f1220; color: #e9eefc; }
+      .card { max-width: 760px; margin: 0 auto; border: 1px solid rgba(255,255,255,.16); border-radius: 14px; padding: 18px; background: rgba(255,255,255,.04); }
+      a, button { color: #e9eefc; text-decoration: none; border: 1px solid rgba(255,255,255,.2); border-radius: 10px; padding: 8px 10px; background: rgba(255,255,255,.06); display: inline-block; margin-right: 8px; }
+      .muted { opacity: .75; font-size: .95rem; }
+      code { background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Legacy UI Status</h2>
+      <p class="muted">Legacy server is expected on <code>${LEGACY_UI_URL}</code>. If that dev server is down, browser shows "refused to connect".</p>
+      <p>
+        <a href="${LEGACY_UI_URL}" target="_blank" rel="noreferrer">Open Legacy Port</a>
+        <a href="/chat/">Open New Console</a>
+        <a href="/">Back to Dashboard</a>
+      </p>
+    </div>
+  </body>
+</html>`);
+});
+
+// Legacy UI proxy so it also works through alfred.xvadur.com (no localhost redirect on client).
+app.use('/legacy', (req, res) => {
+  const upstreamPath = req.originalUrl.replace(/^\/legacy/, '') || '/';
+  const targetHost = LEGACY_TARGET.hostname;
+  const targetPort = LEGACY_TARGET.port || (LEGACY_TARGET.protocol === 'https:' ? 443 : 80);
+
+  const proxyReq = http.request({
+    hostname: targetHost,
+    port: targetPort,
+    method: req.method,
+    path: upstreamPath,
+    headers: {
+      ...req.headers,
+      host: `${targetHost}:${targetPort}`
+    }
+  }, (proxyRes) => {
+    const statusCode = proxyRes.statusCode || 502;
+    const contentType = String(proxyRes.headers['content-type'] || '');
+    const isHtml = contentType.includes('text/html');
+    const isJsLike =
+      contentType.includes('javascript') ||
+      contentType.includes('typescript') ||
+      contentType.includes('ecmascript');
+
+    res.status(statusCode);
+    for (const [key, value] of Object.entries(proxyRes.headers)) {
+      // Avoid cross-host redirects to localhost in client browser.
+      if (key.toLowerCase() === 'location' && typeof value === 'string') {
+        try {
+          const u = new URL(value, `${LEGACY_TARGET.protocol}//${targetHost}:${targetPort}`);
+          const isLegacyHost = u.hostname === targetHost && `${u.port || (u.protocol === 'https:' ? '443' : '80')}` === `${targetPort}`;
+          if (isLegacyHost) {
+            res.setHeader('location', `/legacy${u.pathname}${u.search}`);
+            continue;
+          }
+        } catch {
+          // fall through
+        }
+      }
+      if (value != null) res.setHeader(key, value);
+    }
+
+    if (!isHtml && !isJsLike) {
+      proxyRes.pipe(res);
+      return;
+    }
+
+    // Rewrite root-absolute URLs so legacy Vite assets resolve under /legacy/*
+    // when proxied through Alfred server.
+    let body = '';
+    proxyRes.setEncoding('utf8');
+    proxyRes.on('data', (chunk) => {
+      body += chunk;
+    });
+    proxyRes.on('end', () => {
+      const rewritten = body
+        .replace(/(src|href)=["']\/(?!\/)/g, '$1="/legacy/')
+        .replace(/import\s+["']\/(?!\/)/g, 'import "/legacy/')
+        .replace(/from\s+["']\/(?!\/)/g, 'from "/legacy/')
+        .replace(/import\s*\(\s*["']\/(?!\/)/g, 'import("/legacy/');
+      res.send(rewritten);
+    });
+  });
+
+  proxyReq.on('error', () => {
+    res.status(502).send('Legacy UI is offline. Check /legacy/status');
+  });
+
+  req.pipe(proxyReq);
 });
 
 // Default route - serve dashboard
