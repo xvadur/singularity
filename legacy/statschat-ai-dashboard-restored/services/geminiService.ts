@@ -8,6 +8,19 @@ type JarvisChatResponse = {
   replyText?: string;
 };
 
+type CaptureResponse = {
+  ok?: boolean;
+  error?: string;
+  queuedCommand?: {
+    id?: string;
+    command?: string;
+  };
+  item?: {
+    id?: string;
+    type?: string;
+  };
+};
+
 function sanitizeThreadId(threadId?: string) {
   return String(threadId || '')
     .toLowerCase()
@@ -22,6 +35,48 @@ function buildSessionKey(threadId?: string) {
   if (cleaned) return `agent:main:webchat:${cleaned}`;
   return 'agent:main:main';
 }
+
+export const captureMessageToJarvis = async (
+  newMessage: string,
+  threadId?: string,
+  agentId?: string
+): Promise<string> => {
+  const message = newMessage.trim();
+  if (!message) {
+    return 'Error: Empty message.';
+  }
+
+  try {
+    const res = await fetch('/api/capture', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'note',
+        priority: 'medium',
+        tags: ['legacy-ui'],
+        source: 'legacy-ui',
+        threadId,
+        content: message,
+        meta: {
+          agentId: agentId || 'default'
+        }
+      })
+    });
+
+    const data = (await res.json()) as CaptureResponse;
+    if (!res.ok || !data?.ok) {
+      return `Error: ${data?.error || `Capture failed (${res.status})`}`;
+    }
+
+    if (data?.queuedCommand?.command) {
+      return `Saved to Jarvis command queue: /${data.queuedCommand.command}`;
+    }
+
+    return 'Saved to Jarvis inbox.';
+  } catch (error: any) {
+    return `Error: ${error?.message || 'Unable to capture message.'}`;
+  }
+};
 
 export const sendMessageToGemini = async (
   _history: Message[],

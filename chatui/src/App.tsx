@@ -21,6 +21,15 @@ type EventItem = {
 
 type StatusResponse = {
   timestamp?: string;
+  player?: {
+    name: string;
+    handle: string;
+    level: number;
+    title: string;
+    totalXP: number;
+    xpToNext: number;
+    streak: number;
+  };
   overview?: {
     vitalityScore?: number | null;
     vitalityBand?: string | null;
@@ -34,18 +43,69 @@ type StatusResponse = {
     totalCaptured?: number | null;
     list?: InboxItem[];
   };
+  quests?: {
+    active: number;
+    list: BackendQuest[];
+  };
+  tasks?: {
+    open: number;
+    list: BackendTask[];
+  };
+  life?: {
+    sleep: { hours: number; quality: string; lastUpdate: string };
+    nutrition: { calories: number; quality: string; lastUpdate: string };
+    exercise: { activity: string; duration: number; lastUpdate: string };
+  };
   events?: {
     date?: string;
     recent?: EventItem[];
     count?: number;
   };
+  openclaw?: {
+    sessions: OpenClawSession[];
+  };
   systems?: Record<string, boolean>;
 };
 
-type CaptureType = 'task' | 'idea' | 'insight' | 'link' | 'note';
+type BackendQuest = {
+  id: string;
+  name: string;
+  description: string;
+  priority: string;
+  status: string;
+  progress: number;
+  deadline: string;
+  xpReward: number;
+};
+
+type BackendTask = {
+  id: string;
+  title: string;
+  priority: string;
+  status: string;
+  age: string;
+};
+
+type OpenClawSession = {
+  id: string;
+  name: string;
+  status: string;
+  runtime: string;
+  tokens: string;
+  task: string;
+};
+
+type CaptureType = 'task' | 'idea' | 'insight' | 'link' | 'note' | 'bug' | 'feature' | 'improvement' | 'reminder';
+type TicketCategory = 'work' | 'personal' | 'openclaw' | 'health' | 'finance' | 'learning' | 'other';
 type CapturePriority = 'low' | 'medium' | 'high' | 'critical';
 type PromptCategory = 'action' | 'planning' | 'research';
 type PanelMode = 'monitor' | 'workquest';
+type AgentMode = 'general-assistant';
+type SlashCommand = {
+  name: string;
+  args: string;
+  raw: string;
+};
 
 type Quest = {
   id: string;
@@ -98,6 +158,8 @@ type GameState = {
 };
 
 const GAME_STATE_KEY = 'alfred_workquest_v1';
+const AGENT_MODE_KEY = 'alfred_agent_mode_v1';
+const JARVIS_TOGGLE_KEY = 'alfred_jarvis_toggle_v1';
 
 const ACHIEVEMENT_LABELS: Record<AchievementId, string> = {
   first_prompt: 'First Prompt',
@@ -279,12 +341,27 @@ function nextStreak(lastPromptDate: string | null, streakDays: number, todayKey:
   return Math.max(1, Math.floor(Math.max(1, streakDays) / 2));
 }
 
+function parseSlashCommandInput(input: string): SlashCommand | null {
+  const text = input.trim();
+  if (!text.startsWith('/')) return null;
+
+  const match = text.match(/^\/([a-z0-9_-]+)(?:\s+([\s\S]*))?$/i);
+  if (!match) return null;
+
+  return {
+    name: String(match[1]).toLowerCase(),
+    args: String(match[2] || '').trim(),
+    raw: text
+  };
+}
+
 export default function App() {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const [type, setType] = useState<CaptureType>('note');
+  const [ticketCategory, setTicketCategory] = useState<TicketCategory>('work');
   const [priority, setPriority] = useState<CapturePriority>('medium');
   const [tags, setTags] = useState('');
   const [content, setContent] = useState('');
@@ -295,6 +372,23 @@ export default function App() {
       return '';
     }
   });
+  const [agentMode, setAgentMode] = useState<AgentMode>(() => {
+    try {
+      const saved = localStorage.getItem(AGENT_MODE_KEY);
+      return saved === 'general-assistant' ? 'general-assistant' : 'general-assistant';
+    } catch {
+      return 'general-assistant';
+    }
+  });
+  const [jarvisArmed, setJarvisArmed] = useState(() => {
+    try {
+      return localStorage.getItem(JARVIS_TOGGLE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [jarvisTriggering, setJarvisTriggering] = useState(false);
+  const [jarvisLastReply, setJarvisLastReply] = useState<string | null>(null);
 
   const [panelMode, setPanelMode] = useState<PanelMode>('workquest');
   const [category, setCategory] = useState<PromptCategory>('action');
@@ -340,6 +434,22 @@ export default function App() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(AGENT_MODE_KEY, agentMode);
+    } catch {
+      // ignore
+    }
+  }, [agentMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(JARVIS_TOGGLE_KEY, jarvisArmed ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [jarvisArmed]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(GAME_STATE_KEY, JSON.stringify(gameState));
     } catch {
       // ignore
@@ -353,6 +463,7 @@ export default function App() {
       .filter(Boolean)
       .slice(0, 12);
   }, [tags]);
+  const currentSlashCommand = useMemo(() => parseSlashCommandInput(content), [content]);
 
   const totalWorkQuestXp = useMemo(() => {
     return gameState.runs.reduce((sum, run) => sum + run.xpAwarded, 0);
@@ -428,13 +539,16 @@ export default function App() {
   const submit = useCallback(async () => {
     const text = content.trim();
     if (!text) return;
+    const slashCommand = parseSlashCommandInput(text);
+    const shouldTriggerJarvis = jarvisArmed;
 
     setErr(null);
+    setJarvisLastReply(null);
 
     let nextState: GameState | null = null;
     let runMeta: PromptRun | null = null;
 
-    if (gameState.enabled) {
+    if (gameState.enabled && !slashCommand) {
       const now = new Date();
       const nowIso = now.toISOString();
       const todayKey = dateKey(now);
@@ -524,6 +638,23 @@ export default function App() {
     try {
       const headers: Record<string, string> = { 'content-type': 'application/json' };
       if (token.trim()) headers.authorization = `Bearer ${token.trim()}`;
+      const payloadMeta: Record<string, unknown> = {};
+      if (runMeta) {
+        payloadMeta.category = runMeta.category;
+        payloadMeta.questId = runMeta.questId;
+        payloadMeta.rpe = runMeta.rpe;
+        payloadMeta.focusPurity = runMeta.focusPurity;
+        payloadMeta.cognitiveScore = runMeta.cognitiveScore;
+        payloadMeta.vocabScore = runMeta.vocabScore;
+        payloadMeta.xpAwarded = runMeta.xpAwarded;
+        payloadMeta.criticalHit = runMeta.criticalHit;
+      }
+      if (slashCommand) {
+        payloadMeta.slashCommand = {
+          name: slashCommand.name,
+          args: slashCommand.args
+        };
+      }
 
       const res = await fetch('/api/capture', {
         method: 'POST',
@@ -531,20 +662,11 @@ export default function App() {
         body: JSON.stringify({
           type,
           priority,
+          category: ticketCategory,
           tags: parsedTags,
           content: text,
-          meta: runMeta
-            ? {
-                category: runMeta.category,
-                questId: runMeta.questId,
-                rpe: runMeta.rpe,
-                focusPurity: runMeta.focusPurity,
-                cognitiveScore: runMeta.cognitiveScore,
-                vocabScore: runMeta.vocabScore,
-                xpAwarded: runMeta.xpAwarded,
-                criticalHit: runMeta.criticalHit
-              }
-            : undefined
+          source: 'chatui',
+          meta: Object.keys(payloadMeta).length ? payloadMeta : undefined
         })
       });
 
@@ -557,12 +679,39 @@ export default function App() {
         setGameState(nextState);
       }
 
+      if (shouldTriggerJarvis) {
+        setJarvisTriggering(true);
+        try {
+          const jarvisRes = await fetch('/api/jarvis/chat', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              threadId: agentMode,
+              message: text
+            })
+          });
+
+          if (!jarvisRes.ok) {
+            const msg = await jarvisRes.text().catch(() => '');
+            throw new Error(msg || `jarvis ${jarvisRes.status}`);
+          }
+
+          const jarvisData = await jarvisRes.json() as { replyText?: string };
+          setJarvisLastReply(jarvisData?.replyText || 'Jarvis accepted the message.');
+        } catch (jarvisError: any) {
+          setErr(`Captured, but Jarvis failed: ${jarvisError?.message || String(jarvisError)}`);
+        } finally {
+          setJarvisTriggering(false);
+          setJarvisArmed(false);
+        }
+      }
+
       setContent('');
       await refresh();
     } catch (e: any) {
       setErr(e?.message || String(e));
     }
-  }, [category, content, focusPurity, gameState, parsedTags, priority, refresh, rpe, selectedQuestId, token, type]);
+  }, [agentMode, category, content, focusPurity, gameState, jarvisArmed, parsedTags, priority, refresh, rpe, selectedQuestId, token, type]);
 
   const createQuest = useCallback(() => {
     const name = newQuestName.trim();
@@ -597,15 +746,15 @@ export default function App() {
     <div className="page">
       <header className="header">
         <div className="title">
-          <div className="h1">Alfred Console</div>
+          <div className="h1">
+            {status?.player ? `${status.player.name} // ${status.player.handle}` : 'Alfred Console'}
+          </div>
           <div className="sub">
-            <a href="/" className="link">
-              Dashboard
-            </a>
-            <span className="muted"> / </span>
-            <a href="/legacy" className="link" target="_blank" rel="noreferrer">
-              Legacy UI
-            </a>
+            {status?.player?.title ? (
+              <span className="bold">{status.player.title}</span>
+            ) : (
+              <a href="/" className="link">Dashboard</a>
+            )}
             <span className="muted"> / </span>
             <button className="link-btn" onClick={refresh} disabled={loading}>
               Refresh
@@ -614,6 +763,29 @@ export default function App() {
         </div>
 
         <div className="header-right">
+          <div className="agent-strip">
+            <label className="agent-pill">
+              <span className="agent-label">Agent:</span>
+              <select className="agent-select" value={agentMode} onChange={e => setAgentMode(e.target.value as AgentMode)}>
+                <option value="general-assistant">General Assistant</option>
+              </select>
+            </label>
+
+            <label className={`jarvis-toggle ${jarvisArmed ? 'jarvis-toggle-on' : ''}`}>
+              <input
+                type="checkbox"
+                checked={jarvisArmed}
+                onChange={e => setJarvisArmed(e.target.checked)}
+              />
+              <span className="jarvis-track">
+                <span className="jarvis-thumb" />
+              </span>
+              <span className="jarvis-toggle-text">
+                Jarvis {jarvisArmed ? 'ON (next msg)' : 'OFF'}
+              </span>
+            </label>
+          </div>
+
           <div className="segment">
             <button
               className={`segment-btn ${panelMode === 'monitor' ? 'segment-btn-active' : ''}`}
@@ -631,16 +803,20 @@ export default function App() {
 
           <div className="pills">
             <div className="pill">
-              System XP <span className="mono">{status?.overview?.totalXP ?? '…'}</span>
+              <span className="tiny muted uppercase">Master XP</span>
+              <span className="mono">{status?.overview?.totalXP ?? '…'}</span>
             </div>
             <div className="pill">
-              WQ XP <span className="mono">{totalWorkQuestXp}</span>
+              <span className="tiny muted uppercase">WorkQuest XP</span>
+              <span className="mono">{totalWorkQuestXp}</span>
             </div>
             <div className="pill">
-              Streak <span className="mono">{gameState.streakDays || status?.overview?.streakDays || 0}</span>
+              <span className="tiny muted uppercase">Current Streak</span>
+              <span className="mono">{gameState.streakDays || status?.overview?.streakDays || 0}d</span>
             </div>
             <div className="pill">
-              Focus <span className="mono">{todayFocus}/{gameState.dailyFocusGoal}</span>
+              <span className="tiny muted uppercase">Focus Energy</span>
+              <span className="mono">{todayFocus}/{gameState.dailyFocusGoal}</span>
             </div>
           </div>
         </div>
@@ -651,49 +827,45 @@ export default function App() {
       <main className="grid">
         <section className="card span-8">
           <div className="card-title">Capture</div>
-          <div className="card-sub">Prompt capture + gamified metadata for WorkQuest scoring.</div>
+          <div className="card-sub">Prompt capture + slash command ingest (`/log ...`) for Jarvis inbox.</div>
 
-          <div className="form-row form-row-3">
+          <div className="form-grid">
             <label className="label">
               Type
               <select className="select" value={type} onChange={e => setType(e.target.value as CaptureType)}>
-                <option value="note">note</option>
-                <option value="task">task</option>
-                <option value="idea">idea</option>
-                <option value="insight">insight</option>
-                <option value="link">link</option>
+                <option value="task">Task</option>
+                <option value="bug">Bug</option>
+                <option value="feature">Feature</option>
+                <option value="improvement">Improvement</option>
+                <option value="reminder">Reminder</option>
+                <option value="note">Note</option>
+                <option value="idea">Idea</option>
+                <option value="insight">Insight</option>
+                <option value="link">Link</option>
+              </select>
+            </label>
+
+            <label className="label">
+              Category
+              <select className="select" value={ticketCategory} onChange={e => setTicketCategory(e.target.value as TicketCategory)}>
+                <option value="work">Work</option>
+                <option value="personal">Personal</option>
+                <option value="openclaw">OpenClaw</option>
+                <option value="health">Health</option>
+                <option value="finance">Finance</option>
+                <option value="learning">Learning</option>
+                <option value="other">Other</option>
               </select>
             </label>
 
             <label className="label">
               Priority
-              <select
-                className="select"
-                value={priority}
-                onChange={e => setPriority(e.target.value as CapturePriority)}
-              >
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-                <option value="critical">critical</option>
+              <select className="select" value={priority} onChange={e => setPriority(e.target.value as CapturePriority)}>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
               </select>
-            </label>
-
-            <label className="label">
-              Tags (comma)
-              <input className="input" value={tags} onChange={e => setTags(e.target.value)} placeholder="workquest, boss" />
-            </label>
-          </div>
-
-          <div className="form-row form-row-4">
-            <label className="label">
-              Prompt Category
-              <select className="select" value={category} onChange={e => setCategory(e.target.value as PromptCategory)}>
-                <option value="action">Action</option>
-                <option value="planning">Planning / Reflection</option>
-                <option value="research">Research / Study</option>
-              </select>
-              <span className="tiny muted">{CATEGORY_HINTS[category]}</span>
             </label>
 
             <label className="label">
@@ -706,6 +878,21 @@ export default function App() {
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label className="label">
+              Tags (comma)
+              <input className="input" value={tags} onChange={e => setTags(e.target.value)} placeholder="workquest, boss" />
+            </label>
+
+            <label className="label">
+              Prompt Category
+              <select className="select" value={category} onChange={e => setCategory(e.target.value as PromptCategory)}>
+                <option value="action">Action</option>
+                <option value="planning">Planning / Reflection</option>
+                <option value="research">Research / Study</option>
+              </select>
+              <span className="tiny muted">{CATEGORY_HINTS[category]}</span>
             </label>
 
             <label className="label">
@@ -756,43 +943,63 @@ export default function App() {
           </label>
 
           <div className="actions">
-            <button className="btn" onClick={submit} disabled={!content.trim()}>
-              Send to Inbox
+            <button className="btn" onClick={submit} disabled={!content.trim() || jarvisTriggering}>
+              {jarvisTriggering
+                ? 'Jarvis processing...'
+                : (jarvisArmed
+                  ? 'Send + Trigger Jarvis'
+                  : (currentSlashCommand?.name ? `Queue /${currentSlashCommand.name}` : 'Send to Inbox'))}
             </button>
             <div className="muted tiny">
               Last update: <span className="mono">{fmt(status?.timestamp || null)}</span>
             </div>
           </div>
+
+          {jarvisArmed ? (
+            <div className="tiny muted jarvis-hint">
+              Jarvis toggle is armed. The next sent message will be forwarded to Jarvis, then toggle auto-switches to OFF.
+            </div>
+          ) : null}
+          {jarvisLastReply ? (
+            <div className="note-box">
+              <div className="tiny muted">Jarvis reply</div>
+              <div>{jarvisLastReply}</div>
+            </div>
+          ) : null}
         </section>
 
         <section className="card span-4 right-panel">
           {panelMode === 'monitor' ? (
             <>
-              <div className="card-title">Monitor Panel</div>
-              <div className="card-sub">System-level overview and recommendation.</div>
+              <div className="card-title">System Monitor</div>
+              <div className="card-sub">Real-time metrics from Jarvis-Workspace.</div>
 
               <div className="stack-10">
                 <div className="metric-row">
-                  <span className="muted">Vitality</span>
+                  <span className="muted">Vitality Score</span>
                   <strong className="mono">
                     {status?.overview?.vitalityScore ?? '…'}
                     {status?.overview?.vitalityBand ? ` (${status.overview.vitalityBand})` : ''}
                   </strong>
                 </div>
                 <div className="metric-row">
+                  <span className="muted">Pending Inbox</span>
+                  <strong className="mono">{status?.inbox?.pending ?? '…'}</strong>
+                </div>
+                <div className="metric-row">
                   <span className="muted">Open Tasks</span>
                   <strong className="mono">{status?.overview?.openTasks ?? '…'}</strong>
                 </div>
                 <div className="metric-row">
-                  <span className="muted">Inbox Pending</span>
-                  <strong className="mono">{status?.inbox?.pending ?? '…'}</strong>
+                  <span className="muted">Active Quests</span>
+                  <strong className="mono">{status?.quests?.active ?? '…'}</strong>
                 </div>
                 <div className="metric-row">
-                  <span className="muted">Events Today</span>
+                  <span className="muted">Daily Events</span>
                   <strong className="mono">{status?.events?.count ?? '…'}</strong>
                 </div>
-                <div className="note-box">
-                  <div className="tiny muted">Cognitive recommendation</div>
+                <div className="note-box highlight">
+                  <div className="tiny muted uppercase">Jarvis Recommendation</div>
                   <div>{recommendation}</div>
                 </div>
               </div>
@@ -1050,6 +1257,90 @@ export default function App() {
           </div>
         </section>
 
+        <section className="card span-6">
+          <div className="card-title">Active Quests (Workspace)</div>
+          <div className="card-sub">Major missions fetched from your Jarvis-Workspace.</div>
+          <div className="list">
+            {(status?.quests?.list || []).map(quest => (
+              <div key={quest.id} className={`item ${clsForPriority(quest.priority)}`}>
+                <div className="item-top">
+                  <div className="bold">{quest.name}</div>
+                  <span className={`badge badge-status-${(quest.status || 'unknown').toLowerCase()}`}>{quest.status || 'Unknown'}</span>
+                </div>
+                <div className="progress-track">
+                  <div className="progress-fill" style={{ width: `${quest.progress}%` }} />
+                </div>
+                <div className="item-content tiny muted">{quest.description}</div>
+                <div className="tags tiny">Reward: <span className="mono">+{quest.xpReward} XP</span> · Deadline: <span className="mono">{quest.deadline}</span></div>
+              </div>
+            ))}
+            {!status?.quests?.list?.length ? <div className="muted tiny">No active workspace quests.</div> : null}
+          </div>
+        </section>
+
+        <section className="card span-6">
+          <div className="card-title">Open Tasks (Workspace)</div>
+          <div className="card-sub">Current prioritized to-dos from your system tasks.</div>
+          <div className="list">
+            {(status?.tasks?.list || []).map(task => (
+              <div key={task.id} className={`item ${clsForPriority(task.priority)}`}>
+                <div className="item-top">
+                  <div className="bold">{task.title}</div>
+                  <span className="badge muted tiny">{task.age}</span>
+                </div>
+                <div className="tags tiny uppercase mono muted">Priority: {task.priority}</div>
+              </div>
+            ))}
+            {!status?.tasks?.list?.length ? <div className="muted tiny">No open workspace tasks.</div> : null}
+          </div>
+        </section>
+
+        <section className="card span-6">
+          <div className="card-title">OpenClaw Sessions</div>
+          <div className="card-sub">Active AI agent processes and token consumption.</div>
+          <div className="list">
+            {(status?.openclaw?.sessions || []).map(session => (
+              <div key={session.id} className="item">
+                <div className="item-top">
+                  <strong>{session.name}</strong>
+                  <span className="badge">{session.status}</span>
+                </div>
+                <div className="item-content tiny">{session.task}</div>
+                <div className="tags tiny mono">
+                  Runtime: {session.runtime} · Tokens: {session.tokens}
+                </div>
+              </div>
+            ))}
+            {!status?.openclaw?.sessions?.length ? <div className="muted tiny">No active AI sessions.</div> : null}
+          </div>
+        </section>
+
+        <section className="card span-6">
+          <div className="card-title">Life Stats</div>
+          <div className="card-sub">Real-time vitality tracking (Sleep, Exercise, Nutrition).</div>
+          {status?.life ? (
+            <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+              <div className="item" style={{ textAlign: 'center' }}>
+                <div className="tiny muted uppercase">Sleep</div>
+                <div className="bold">{status.life.sleep.hours}h</div>
+                <div className="tiny muted">{status.life.sleep.quality}</div>
+              </div>
+              <div className="item" style={{ textAlign: 'center' }}>
+                <div className="tiny muted uppercase">Nutrition</div>
+                <div className="bold">{status.life.nutrition.calories}kcal</div>
+                <div className="tiny muted">{status.life.nutrition.quality}</div>
+              </div>
+              <div className="item" style={{ textAlign: 'center' }}>
+                <div className="tiny muted uppercase">Exercise</div>
+                <div className="bold">{status.life?.exercise?.duration ?? 0}m</div>
+                <div className="tiny muted">{status.life?.exercise?.activity || 'N/A'}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="muted tiny">Life stats unavailable.</div>
+          )}
+        </section>
+
         <section className="card span-12">
           <div className="card-title">Recent Events</div>
           <div className="card-sub">
@@ -1071,6 +1362,13 @@ export default function App() {
           </div>
         </section>
       </main>
+      <div className="noise-overlay" />
+      <svg style={{ position: 'fixed', width: 0, height: 0, pointerEvents: 'none' }}>
+        <filter id="noise">
+          <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="3" stitchTiles="stitch" />
+          <feColorMatrix type="saturate" values="0" />
+        </filter>
+      </svg>
     </div>
   );
 }

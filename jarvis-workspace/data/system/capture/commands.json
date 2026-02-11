@@ -1,0 +1,9 @@
+{
+  "queue": [],
+  "stats": {
+    "totalQueued": 0,
+    "pending": 0,
+    "byCommand": {},
+    "lastQueuedAt": null
+  }
+}

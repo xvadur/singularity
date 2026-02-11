@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "alfred",
-    "chatui"
+    "chatui",
+    "jarvis-workspace"
   ],
   "scripts": {
     "dev": "npm run dev:all",
