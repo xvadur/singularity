@@ -1,0 +1,9 @@
+{
+  "name": "@xvadur/jarvis-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local Jarvis workspace storage (capture inbox, command queue, event journal).",
+  "scripts": {
+    "bootstrap": "node scripts/bootstrap.js"
+  }
+}

@@ -13,9 +13,17 @@ const PORT = Number.parseInt(process.env.PORT || '3030', 10);
 // (Using "localhost" can resolve to ::1 and break if the server isn't listening on IPv6.)
 const HOST = process.env.HOST || '127.0.0.1';
 
-const WORKSPACE = path.join(process.env.HOME, '.openclaw', 'workspace');
+const REPO_ROOT = path.join(__dirname, '..');
+const DEFAULT_MONOREPO_WORKSPACE = path.join(REPO_ROOT, 'jarvis-workspace');
+const LEGACY_WORKSPACE = path.join(process.env.HOME || '', '.openclaw', 'workspace');
+const WORKSPACE = process.env.JARVIS_WORKSPACE
+  ? path.resolve(process.env.JARVIS_WORKSPACE)
+  : (fs.existsSync(DEFAULT_MONOREPO_WORKSPACE) ? DEFAULT_MONOREPO_WORKSPACE : LEGACY_WORKSPACE);
 const DATA_DIR = path.join(WORKSPACE, 'data');
-const CAPTURE_INBOX_PATH = path.join(DATA_DIR, 'system', 'capture', 'inbox.json');
+const CAPTURE_DIR = path.join(DATA_DIR, 'system', 'capture');
+const CAPTURE_INBOX_PATH = path.join(CAPTURE_DIR, 'inbox.json');
+const COMMAND_QUEUE_PATH = path.join(CAPTURE_DIR, 'commands.json');
+const CHAT_JOURNAL_PATH = path.join(DATA_DIR, 'chat', 'chatui-events.jsonl');
 const CHAT_DIST_DIR = path.join(__dirname, '..', 'chatui', 'dist');
 const LEGACY_UI_URL = process.env.LEGACY_UI_URL || 'http://127.0.0.1:5175';
 const CAPTURE_TOKEN = process.env.CAPTURE_TOKEN || '';
@@ -23,6 +31,15 @@ const OPENCLAW_BIN = process.env.OPENCLAW_BIN || '';
 const OPENCLAW_MJS = process.env.OPENCLAW_MJS || path.join(process.env.HOME || '', 'OPENCLAW', 'openclaw.mjs');
 const OPENCLAW_DEFAULT_SESSION_KEY = process.env.OPENCLAW_SESSION_KEY || 'agent:main:main';
 const OPENCLAW_TIMEOUT_MS = Number.parseInt(process.env.OPENCLAW_GATEWAY_TIMEOUT_MS || '90000', 10);
+const JARVIS_INBOX_CRON_ENABLED = process.env.JARVIS_INBOX_CRON_ENABLED !== '0';
+const JARVIS_INBOX_CRON_MS = clamp(
+  Number.parseInt(process.env.JARVIS_INBOX_CRON_MS || String(3 * 60 * 60 * 1000), 10),
+  60_000,
+  24 * 60 * 60 * 1000
+);
+const JARVIS_INBOX_SESSION_KEY = process.env.JARVIS_INBOX_SESSION_KEY || OPENCLAW_DEFAULT_SESSION_KEY;
+const JARVIS_INBOX_PROMPT = process.env.JARVIS_INBOX_PROMPT
+  || 'Open capture inbox and pending command queue. Execute what is actionable, then summarize completed and pending actions.';
 const LEGACY_TARGET = (() => {
   try {
     return new URL(LEGACY_UI_URL);
@@ -59,6 +76,143 @@ function writeJsonAtomic(filePath, data) {
   fs.renameSync(tmpPath, filePath);
 }
 
+function ensureDirSync(dirPath) {
+  fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function appendJsonl(filePath, row) {
+  const dir = path.dirname(filePath);
+  ensureDirSync(dir);
+  fs.appendFileSync(filePath, `${JSON.stringify(row)}\n`, 'utf8');
+}
+
+function defaultCaptureInboxDoc() {
+  return { inbox: [], autoRules: [], captureStats: {}, settings: {} };
+}
+
+function defaultCommandQueueDoc() {
+  return {
+    queue: [],
+    stats: {
+      totalQueued: 0,
+      pending: 0,
+      byCommand: {},
+      lastQueuedAt: null
+    }
+  };
+}
+
+function parseSlashCommand(rawInput) {
+  const input = String(rawInput || '').trim();
+  if (!input.startsWith('/')) return null;
+
+  const match = input.match(/^\/([a-z0-9_-]+)(?:\s+([\s\S]*))?$/i);
+  if (!match) return null;
+
+  return {
+    name: String(match[1]).toLowerCase(),
+    args: String(match[2] || '').trim(),
+    raw: input
+  };
+}
+
+function enqueueJarvisCommand(command) {
+  let doc = readJSON(COMMAND_QUEUE_PATH);
+  if (!doc || typeof doc !== 'object') doc = defaultCommandQueueDoc();
+  if (!Array.isArray(doc.queue)) doc.queue = [];
+  if (!doc.stats || typeof doc.stats !== 'object') doc.stats = {};
+  if (!doc.stats.byCommand || typeof doc.stats.byCommand !== 'object') doc.stats.byCommand = {};
+
+  doc.queue.unshift(command);
+  doc.queue = doc.queue.slice(0, 1000);
+
+  const cmdName = String(command?.command || 'unknown');
+  doc.stats.totalQueued = Number(doc.stats.totalQueued || 0) + 1;
+  doc.stats.byCommand[cmdName] = Number(doc.stats.byCommand[cmdName] || 0) + 1;
+  doc.stats.pending = doc.queue.filter(item => item?.status !== 'processed').length;
+  doc.stats.lastQueuedAt = command?.createdAt || new Date().toISOString();
+
+  writeJsonAtomic(COMMAND_QUEUE_PATH, doc);
+}
+
+function bootstrapWorkspaceFiles() {
+  ensureDirSync(CAPTURE_DIR);
+  ensureDirSync(path.dirname(CHAT_JOURNAL_PATH));
+
+  if (!fs.existsSync(CAPTURE_INBOX_PATH)) {
+    writeJsonAtomic(CAPTURE_INBOX_PATH, defaultCaptureInboxDoc());
+  }
+
+  if (!fs.existsSync(COMMAND_QUEUE_PATH)) {
+    writeJsonAtomic(COMMAND_QUEUE_PATH, defaultCommandQueueDoc());
+  }
+}
+
+function getPendingJarvisWork() {
+  const inboxDoc = readJSON(CAPTURE_INBOX_PATH) || defaultCaptureInboxDoc();
+  const commandDoc = readJSON(COMMAND_QUEUE_PATH) || defaultCommandQueueDoc();
+
+  const inboxList = Array.isArray(inboxDoc.inbox) ? inboxDoc.inbox : [];
+  const cmdList = Array.isArray(commandDoc.queue) ? commandDoc.queue : [];
+
+  const inboxPending = inboxDoc?.captureStats?.pending != null
+    ? Number(inboxDoc.captureStats.pending || 0)
+    : inboxList.filter(item => !item?.processed).length;
+  const commandsPending = commandDoc?.stats?.pending != null
+    ? Number(commandDoc.stats.pending || 0)
+    : cmdList.filter(item => item?.status !== 'processed').length;
+
+  return {
+    inboxPending: Number.isNaN(inboxPending) ? 0 : Math.max(0, inboxPending),
+    commandsPending: Number.isNaN(commandsPending) ? 0 : Math.max(0, commandsPending)
+  };
+}
+
+function triggerJarvisInboxProcessing(reason, force) {
+  const counts = getPendingJarvisWork();
+  if (!force && counts.inboxPending <= 0 && counts.commandsPending <= 0) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: 'no-pending-work',
+      counts
+    };
+  }
+
+  const nowIso = new Date().toISOString();
+  const message = [
+    JARVIS_INBOX_PROMPT,
+    `Reason: ${reason || 'manual'}.`,
+    `Inbox pending: ${counts.inboxPending}.`,
+    `Commands pending: ${counts.commandsPending}.`,
+    'After processing, write a concise summary.'
+  ].join(' ');
+
+  const send = openclawGatewayCall(
+    'chat.send',
+    {
+      sessionKey: JARVIS_INBOX_SESSION_KEY,
+      message,
+      idempotencyKey: `jarvis-inbox-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+    },
+    OPENCLAW_TIMEOUT_MS
+  );
+  const runId = send?.runId || null;
+
+  if (runId) {
+    safeGatewayCall('agent.wait', { runId }, Math.min(OPENCLAW_TIMEOUT_MS, 60_000));
+  }
+
+  return {
+    ok: true,
+    skipped: false,
+    runId,
+    sessionKey: JARVIS_INBOX_SESSION_KEY,
+    triggeredAt: nowIso,
+    counts
+  };
+}
+
 function incrementCaptureStats(doc, newItem) {
   if (!doc || typeof doc !== 'object') return;
   if (!doc.captureStats || typeof doc.captureStats !== 'object') doc.captureStats = {};
@@ -68,13 +222,15 @@ function incrementCaptureStats(doc, newItem) {
   const total = Number(doc.captureStats.totalCaptured || 0);
   const processed = Number(doc.captureStats.processed || 0);
 
-  // If pending isn't present (or is bogus), default to current unprocessed items count.
+  // If pending isn't present, mirror current unprocessed items count (which already
+  // includes the just-added item) instead of incrementing twice.
   const inferredPending = Array.isArray(doc.inbox) ? doc.inbox.filter(i => !i?.processed).length : 0;
-  const pending = (doc.captureStats.pending == null) ? inferredPending : Number(doc.captureStats.pending || 0);
+  const hasPending = doc.captureStats.pending != null && !Number.isNaN(Number(doc.captureStats.pending));
+  const pending = hasPending ? Number(doc.captureStats.pending || 0) + 1 : inferredPending;
 
   doc.captureStats.totalCaptured = total + 1;
   doc.captureStats.processed = processed;
-  doc.captureStats.pending = pending + 1;
+  doc.captureStats.pending = pending;
 
   const src = String(newItem?.source || 'manual');
   doc.captureStats.bySource[src] = Number(doc.captureStats.bySource[src] || 0) + 1;
@@ -305,6 +461,7 @@ async function fetchStatusData() {
     const quests = readJSON(path.join(DATA_DIR, 'xp', 'quests.json'));
     const tasks = readJSON(path.join(DATA_DIR, 'system', 'tasks', 'active.json'));
     const captureInbox = readJSON(path.join(DATA_DIR, 'system', 'capture', 'inbox.json'));
+    const commandQueue = readJSON(COMMAND_QUEUE_PATH);
     
     // Get daily log files
     const memoryDir = path.join(WORKSPACE, 'memory');
@@ -388,7 +545,8 @@ async function fetchStatusData() {
       milestones: milestonesLimited,
       vitalityScore: vitality?.score ?? null,
       vitalityBand: vitality?.band ?? null,
-      inboxPending: captureInbox?.captureStats?.pending ?? (captureInbox?.inbox?.filter(i => !i.processed).length ?? null)
+      inboxPending: captureInbox?.captureStats?.pending ?? (captureInbox?.inbox?.filter(i => !i.processed).length ?? null),
+      pendingCommands: commandQueue?.stats?.pending ?? (commandQueue?.queue?.filter(i => i?.status !== 'processed').length ?? null)
     };
 
     const eventsRecent = readEventsTailForDate(today, 50);
@@ -446,6 +604,18 @@ async function fetchStatusData() {
           priority: i.priority,
           tags: i.tags || [],
           meta: (i.meta && typeof i.meta === 'object') ? i.meta : null
+        }))
+      },
+      commands: {
+        pending: commandQueue?.stats?.pending ?? null,
+        totalQueued: commandQueue?.stats?.totalQueued ?? null,
+        list: (commandQueue?.queue || []).filter(i => i?.status !== 'processed').slice(0, 6).map(i => ({
+          id: i?.id || null,
+          command: i?.command || null,
+          args: i?.args || '',
+          source: i?.source || null,
+          createdAt: i?.createdAt || null,
+          status: i?.status || 'pending'
         }))
       },
       vitality: vitality ? {
@@ -530,6 +700,8 @@ async function getStatusData() {
   }
 }
 
+bootstrapWorkspaceFiles();
+
 app.use(express.json({ limit: '1mb' }));
 
 // API endpoint
@@ -564,23 +736,43 @@ app.post('/api/capture', (req, res) => {
       return res.status(400).json({ ok: false, error: 'content is required' });
     }
 
+    const source = (typeof body.source === 'string' && body.source.trim())
+      ? body.source.trim().slice(0, 64)
+      : 'manual';
+    const threadId = (typeof body.threadId === 'string' && body.threadId.trim())
+      ? body.threadId.trim().slice(0, 120)
+      : null;
     const type = (typeof body.type === 'string' && body.type.trim()) ? body.type.trim() : 'note';
     const priority = (typeof body.priority === 'string' && body.priority.trim()) ? body.priority.trim() : 'medium';
     const tags = Array.isArray(body.tags)
       ? body.tags.map(String).map(t => t.trim()).filter(Boolean).slice(0, 24)
       : [];
-    const meta = (body.meta && typeof body.meta === 'object' && !Array.isArray(body.meta))
+    const incomingMeta = (body.meta && typeof body.meta === 'object' && !Array.isArray(body.meta))
       ? body.meta
       : null;
+    const slashCommand = parseSlashCommand(content);
+    const typeResolved = slashCommand?.name === 'log' ? 'log' : type;
+    const meta = (() => {
+      const value = incomingMeta ? { ...incomingMeta } : {};
+      if (slashCommand) {
+        value.slashCommand = {
+          name: slashCommand.name,
+          args: slashCommand.args,
+          raw: slashCommand.raw
+        };
+      }
+      return Object.keys(value).length ? value : null;
+    })();
 
     const nowIso = new Date().toISOString();
     const id = `capture-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+    const sessionKey = resolveJarvisSessionKey(body.sessionKey, threadId);
 
     const newItem = {
       id,
-      type,
+      type: typeResolved,
       content,
-      source: 'manual',
+      source,
       capturedAt: nowIso,
       processed: false,
       priority,
@@ -590,7 +782,7 @@ app.post('/api/capture', (req, res) => {
 
     let doc = readJSON(CAPTURE_INBOX_PATH);
     if (!doc || typeof doc !== 'object') {
-      doc = { inbox: [], autoRules: [], captureStats: {}, settings: {} };
+      doc = defaultCaptureInboxDoc();
     }
     if (!Array.isArray(doc.inbox)) doc.inbox = [];
 
@@ -599,15 +791,100 @@ app.post('/api/capture', (req, res) => {
     incrementCaptureStats(doc, newItem);
     writeJsonAtomic(CAPTURE_INBOX_PATH, doc);
 
+    let queuedCommand = null;
+    if (slashCommand) {
+      queuedCommand = {
+        id: `cmd-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+        command: slashCommand.name,
+        args: slashCommand.args,
+        raw: slashCommand.raw,
+        source,
+        threadId,
+        sessionKey,
+        status: 'pending',
+        createdAt: nowIso
+      };
+      enqueueJarvisCommand(queuedCommand);
+    }
+
+    appendJsonl(CHAT_JOURNAL_PATH, {
+      id: `evt-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+      ts: nowIso,
+      domain: 'chatui',
+      type: slashCommand ? `slash.${slashCommand.name}` : 'capture',
+      source,
+      text: content,
+      tags,
+      payload: {
+        captureId: id,
+        type: typeResolved,
+        priority,
+        threadId,
+        sessionKey,
+        commandId: queuedCommand?.id || null
+      }
+    });
+
     // Invalidate cache so the dashboard updates immediately.
     cache.timestamp = 0;
 
-    return res.json({ ok: true, item: newItem });
+    return res.json({ ok: true, item: newItem, queuedCommand });
   } catch (error) {
     console.error('Capture Error:', error);
     return res.status(500).json({
       ok: false,
       error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.get('/api/jarvis/commands', (req, res) => {
+  try {
+    const query = (req && req.query && typeof req.query === 'object') ? req.query : {};
+    const limit = clamp(Number(query.limit || 100), 1, 500);
+    const statusFilter = (typeof query.status === 'string' && query.status.trim())
+      ? query.status.trim().toLowerCase()
+      : '';
+
+    const doc = readJSON(COMMAND_QUEUE_PATH) || defaultCommandQueueDoc();
+    const queue = Array.isArray(doc.queue) ? doc.queue : [];
+
+    const list = queue
+      .filter(item => (statusFilter ? String(item?.status || '').toLowerCase() === statusFilter : true))
+      .slice(0, limit);
+
+    return res.json({
+      ok: true,
+      pending: doc?.stats?.pending ?? queue.filter(item => item?.status !== 'processed').length,
+      totalQueued: doc?.stats?.totalQueued ?? queue.length,
+      commands: list
+    });
+  } catch (error) {
+    console.error('Jarvis command queue error:', error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message || 'jarvis command queue failed',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.post('/api/jarvis/inbox/process', (req, res) => {
+  try {
+    const body = (req && req.body && typeof req.body === 'object') ? req.body : {};
+    const force = Boolean(body.force);
+    const reason = (typeof body.reason === 'string' && body.reason.trim())
+      ? body.reason.trim().slice(0, 180)
+      : 'manual-trigger';
+
+    const result = triggerJarvisInboxProcessing(reason, force);
+    return res.json(result);
+  } catch (error) {
+    console.error('Jarvis inbox process error:', error);
+    return res.status(502).json({
+      ok: false,
+      error: error.message || 'jarvis inbox processing failed',
       timestamp: new Date().toISOString()
     });
   }
@@ -833,7 +1110,29 @@ app.listen(PORT, HOST, () => {
   console.log(`Task Monitor Server running on http://${HOST}:${PORT}`);
   console.log(`Workspace: ${WORKSPACE}`);
   console.log(`Data dir: ${DATA_DIR}`);
+  if (JARVIS_INBOX_CRON_ENABLED) {
+    console.log(`Jarvis inbox cron: every ${Math.round(JARVIS_INBOX_CRON_MS / 60000)} minutes`);
+  } else {
+    console.log('Jarvis inbox cron: disabled');
+  }
 });
+
+if (JARVIS_INBOX_CRON_ENABLED) {
+  const timer = setInterval(() => {
+    try {
+      const result = triggerJarvisInboxProcessing('cron-3h', false);
+      if (result.skipped) {
+        console.log('Jarvis inbox cron: skipped (no pending work)');
+      } else {
+        console.log(`Jarvis inbox cron: triggered${result.runId ? ` runId=${result.runId}` : ''}`);
+      }
+    } catch (error) {
+      console.warn('Jarvis inbox cron failed:', error.message);
+    }
+  }, JARVIS_INBOX_CRON_MS);
+
+  if (typeof timer.unref === 'function') timer.unref();
+}
 
 // Pre-warm cache on startup
 console.log('Pre-warming cache...');
