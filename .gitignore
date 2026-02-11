@@ -17,8 +17,11 @@ dist/
 # OS
 .DS_Store
 
-# local archival (kept out of git because of quarantine/old deps)
-legacy/
+# legacy workspace: keep only the restored statschat source in git
+legacy/*
+!legacy/statschat-ai-dashboard-restored/
+legacy/statschat-ai-dashboard-restored/node_modules/
+legacy/statschat-ai-dashboard-restored/dist/
 
 # keep the old UI around locally, but don't track it
 chatui/chatui-legacy-*/

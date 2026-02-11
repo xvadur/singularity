@@ -1,0 +1,5 @@
+{
+  "name": "StatsChat AI Dashboard",
+  "description": "A chat dashboard with real-time writing statistics, activity tracking, and timeline visualization similar to the provided sketch.",
+  "requestFramePermissions": []
+}
