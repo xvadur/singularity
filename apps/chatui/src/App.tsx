@@ -296,7 +296,7 @@ export default function App() {
     }
   });
 
-  const [panelMode, setPanelMode] = useState<PanelMode>('monitor');
+  const [panelMode, setPanelMode] = useState<PanelMode>('workquest');
   const [category, setCategory] = useState<PromptCategory>('action');
   const [selectedQuestId, setSelectedQuestId] = useState<string>('');
   const [rpe, setRpe] = useState(5);
@@ -625,7 +625,7 @@ export default function App() {
               className={`segment-btn ${panelMode === 'workquest' ? 'segment-btn-active' : ''}`}
               onClick={() => setPanelMode('workquest')}
             >
-              WorkQuest
+              Boss XP
             </button>
           </div>
 
@@ -799,8 +799,8 @@ export default function App() {
             </>
           ) : (
             <>
-              <div className="card-title">WorkQuest Dashboard</div>
-              <div className="card-sub">Gamified progress driven by prompt quality and effort.</div>
+              <div className="card-title">Boss XP Dashboard</div>
+              <div className="card-sub">WorkQuest progress driven by prompt quality and effort.</div>
 
               <label className="switch-row">
                 <span>Gamification Enabled</span>
@@ -888,7 +888,7 @@ export default function App() {
         </section>
 
         <section className="card span-4">
-          <div className="card-title">Quest Progress</div>
+          <div className="card-title">Boss Quest Progress</div>
           <div className="card-sub">Active quests with completion bars and completion XP bonus.</div>
 
           <div className="list compact">
@@ -914,7 +914,7 @@ export default function App() {
 
           <div className="divider" />
 
-          <div className="card-title">Create Quest</div>
+          <div className="card-title">Create Boss Quest</div>
           <div className="form-row form-row-1">
             <label className="label">
               Quest Name
@@ -953,7 +953,7 @@ export default function App() {
         </section>
 
         <section className="card span-12">
-          <div className="card-title">WorkQuest History</div>
+          <div className="card-title">Boss XP History</div>
           <div className="card-sub">Prompt runs filtered by quest/category with XP and effort context.</div>
 
           <div className="filters">
