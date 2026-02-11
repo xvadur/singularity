@@ -462,7 +462,6 @@ async function fetchStatusData() {
     const tasks = readJSON(path.join(DATA_DIR, 'system', 'tasks', 'active.json'));
     const captureInbox = readJSON(path.join(DATA_DIR, 'system', 'capture', 'inbox.json'));
     const commandQueue = readJSON(COMMAND_QUEUE_PATH);
-    
     // Get daily log files
     const memoryDir = path.join(WORKSPACE, 'memory');
     const today = new Date().toISOString().split('T')[0];
@@ -486,23 +485,23 @@ async function fetchStatusData() {
     const sleepStats = readJSON(path.join(DATA_DIR, 'life', 'sleep', 'stats.json'));
     const exerciseStats = readJSON(path.join(DATA_DIR, 'life', 'exercise', 'stats.json'));
     const nutritionStats = readJSON(path.join(DATA_DIR, 'life', 'nutrition', 'stats.json'));
-    
+
     // Read recent sessions from tracker files
     const trackerFiles = [
       path.join(DATA_DIR, 'UNIFICATION_SWARM_TRACKER.json'),
       path.join(DATA_DIR, 'audit-reports', 'FINAL_AUDIT_2026-02-10.md')
     ];
-    
+
     // Active quests
-    const activeQuests = quests?.quests?.filter(q => 
+    const activeQuests = quests?.quests?.filter(q =>
       q.status === 'in_progress' || q.status === 'pending'
     ) || [];
-    
+
     // Active tasks
-    const activeTasks = tasks?.tasks?.filter(t => 
+    const activeTasks = tasks?.tasks?.filter(t =>
       t.status !== 'completed'
     ) || [];
-    
+
     // Calculate stats
     const totalXP = player?.player?.totalXP || 0;
     const level = player?.player?.level || 1;
@@ -557,7 +556,7 @@ async function fetchStatusData() {
     const openclawCrons =
       safeGatewayCall('cron.list', {}, 6000) ||
       safeExecJson('openclaw cron list --json', 4000);
-    
+
     return {
       timestamp: new Date().toISOString(),
       player: {
@@ -638,8 +637,15 @@ async function fetchStatusData() {
         recent: eventsRecent
       },
       openclaw: {
-        sessions: openclawSessions || null,
-        crons: openclawCrons || null
+        sessions: Array.isArray(openclawSessions?.sessions) ? openclawSessions.sessions.map(s => ({
+          id: s.id,
+          name: s.name,
+          status: s.status || 'unknown',
+          runtime: s.runtime || '0s',
+          tokens: s.tokens || '0',
+          task: s.task || ''
+        })) : [],
+        crons: Array.isArray(openclawCrons?.crons) ? openclawCrons.crons : []
       },
       snapshots: {
         latestDailyPath: latestDailySnapshotPath,
@@ -668,20 +674,20 @@ async function fetchStatusData() {
 async function getStatusData() {
   const now = Date.now();
   const cacheAge = now - cache.timestamp;
-  
+
   if (cache.data && cacheAge < CACHE_TTL_MS) {
     console.log(`Cache hit: ${Math.round(cacheAge / 1000)}s old`);
     return cache.data;
   }
-  
+
   if (cache.isRefreshing) {
     console.log('Cache miss but refresh in progress, returning stale data');
     return cache.data;
   }
-  
+
   console.log('Cache miss, fetching fresh data...');
   cache.isRefreshing = true;
-  
+
   try {
     const freshData = await fetchStatusData();
     cache.data = freshData;
