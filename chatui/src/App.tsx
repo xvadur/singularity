@@ -31,7 +31,7 @@ type TicketEconomyMeta = {
 
 type EconomyEffect = {
   deltaEEU: number;
-  deltaPU?: number;
+  deltaPU: number;
   deltaXP: number;
   deltaCoins: number;
   blocked: boolean;
@@ -260,6 +260,7 @@ const SHOP_OPTIONS: Array<{ id: ShopTier; label: string; price: number }> = [
 
 const DEFAULT_ECONOMY_EFFECT: EconomyEffect = {
   deltaEEU: 0,
+  deltaPU: 0,
   deltaXP: 0,
   deltaCoins: 0,
   blocked: false,
@@ -1294,7 +1295,7 @@ export default function App() {
             <div className="note-box">
               <div className="tiny muted">Last economy effect</div>
               <div className="tiny">
-                +{lastEconomyEffect.deltaPU ?? lastEconomyEffect.deltaEEU} PU · +{lastEconomyEffect.deltaXP} XP · +{lastEconomyEffect.deltaCoins} coins · Focus ~{lastEconomyEffect.focusMinutesEquivalent} min
+                +{lastEconomyEffect.deltaPU} PU · +{lastEconomyEffect.deltaXP} XP · +{lastEconomyEffect.deltaCoins} coins · Focus ~{lastEconomyEffect.focusMinutesEquivalent} min
               </div>
               {lastEconomyEffect.flags.length ? (
                 <div className="tiny muted">Flags: {lastEconomyEffect.flags.join(', ')}</div>
