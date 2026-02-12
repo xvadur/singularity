@@ -1,13 +1,16 @@
 # PowerUnit Implementation Validation
 
-## Build Status
+## Build Verification
 
+To verify the build passes:
+
+```bash
+npm run build
+# Expected: vite builds chatui with zero errors
+# ✓ 31 modules transformed, built in <1s
 ```
-npm run build: PASS
-vite v5.4.21 building for production...
-✓ 31 modules transformed.
-✓ built in 385ms
-```
+
+Last verified: 2026-02-12, vite v5.4.21, zero errors.
 
 ---
 
@@ -35,7 +38,7 @@ All existing `economy.*` fields unchanged: `todayEEU`, `todayXP`, `todayCoins`, 
 **New additive fields** in response:
 
 ```javascript
-economyEffect.deltaPU: number    // alias for deltaEEU
+economyEffect.deltaPU: number    // alias for deltaEEU (always set on ticket claims)
 economy.powerUnit: { ... }       // same as /api/status
 ```
 
@@ -48,6 +51,24 @@ All existing `economyEffect.*` fields unchanged: `deltaEEU`, `deltaXP`, `deltaCo
 ```javascript
 payload.deltaPU: number    // alias for deltaEEU
 ```
+
+---
+
+## Fallback Behavior
+
+### Frontend → Old Server (forward compatibility)
+
+If the server does not provide `economy.powerUnit` (e.g., running an older version):
+- Monitor panel falls back: `economyView?.powerUnit?.todayPU ?? economyView?.todayEEU ?? 0`
+- Economy effect box uses `deltaPU` directly (required field, always 0 via default)
+- `EconomySnapshot.powerUnit` is optional (`PowerUnitInfo?`), so missing field causes no error
+
+### New Server → Old Frontend (backward compatibility)
+
+If the frontend does not expect `economy.powerUnit`:
+- New fields are ignored by existing deserialization (JavaScript ignores unknown keys)
+- `alfred_economy_cache_v1` may cache new fields but old code doesn't read them
+- No runtime errors; old UI continues showing `todayEEU` values as before
 
 ---
 
@@ -68,19 +89,24 @@ payload.deltaPU: number    // alias for deltaEEU
 
 ## Implemented Items
 
-- [x] PowerUnit benchmark document (`docs/economy/powerunit-benchmark.md`)
-- [x] PowerUnit benchmark JSON (`jarvis-workspace/data/system/game/powerunit-benchmark.json`)
-- [x] Habitica-PowerUnit economy spec (`docs/economy/habitica-powerunit-spec.md`)
-- [x] PowerUnit constants in backend (`POWERUNIT_DISPLAY_NAME`, `POWERUNIT_VERSION`)
-- [x] PowerUnit alias in `getEconomySnapshot()` (`economy.powerUnit` object)
-- [x] PowerUnit alias in `applyTicketEconomyClaim()` (`effect.deltaPU`)
-- [x] PowerUnit alias in economy event payload (`payload.deltaPU`)
-- [x] `PowerUnitInfo` type in frontend
-- [x] `EconomySnapshot.powerUnit` optional field in frontend
-- [x] `EconomyEffect.deltaPU` optional field in frontend
-- [x] Monitor panel: "PowerUnit Economy" header, "Today PU" with fallback
-- [x] Economy effect box: PU label with deltaPU fallback
-- [x] Build validation: `npm run build` passes
+All items implemented on branch `codex/powerunit-benchmark-slice`:
+
+| Item | Commit | Details |
+|------|--------|---------|
+| PowerUnit benchmark document | `2fb6cb1` (docs) | `docs/economy/powerunit-benchmark.md` |
+| PowerUnit benchmark JSON | `ce0448d` (chore) | `jarvis-workspace/data/system/game/powerunit-benchmark.json` |
+| Habitica-PowerUnit economy spec | `2fb6cb1` (docs) | `docs/economy/habitica-powerunit-spec.md` |
+| PowerUnit constants in backend | `8d5c256` (feat) | `POWERUNIT_DISPLAY_NAME`, `POWERUNIT_VERSION` in server-fixed.js |
+| PowerUnit alias in `getEconomySnapshot()` | `8d5c256` (feat) | `economy.powerUnit` object with todayPU, totalPU, etc. |
+| PowerUnit alias in `applyTicketEconomyClaim()` | `8d5c256` (feat) | `effect.deltaPU` alias for `deltaEEU` |
+| PowerUnit alias in economy events | `8d5c256` (feat) | `payload.deltaPU` in JSONL entries |
+| `PowerUnitInfo` type in frontend | `cd56f81` (feat) | Type definition in App.tsx |
+| `EconomySnapshot.powerUnit` field | `cd56f81` (feat) | Optional, with fallback to todayEEU |
+| `EconomyEffect.deltaPU` field | `fa84ff0` (fix) | Required (tightened from optional) |
+| Monitor panel: "PowerUnit Economy" | `cd56f81` (feat) | Header + todayPU display |
+| Economy effect box: PU label | `cd56f81` (feat) | Shows deltaPU value |
+| Benchmark data corrections | `dbf0b64` (fix) | Line counts fixed for accuracy |
+| Habitica spec improvements | `1cb3205` (docs) | Exact line references + deferral clarity |
 
 ## Deferred Items
 
@@ -99,12 +125,12 @@ payload.deltaPU: number    // alias for deltaEEU
 
 ## File Changes Summary
 
-| File | Change Type | Lines Added | Lines Removed |
-|------|------------|-------------|---------------|
-| `docs/economy/powerunit-benchmark.md` | NEW | 149 | 0 |
-| `docs/economy/habitica-powerunit-spec.md` | NEW | 265 | 0 |
-| `docs/economy/powerunit-validation.md` | NEW | this file | 0 |
-| `jarvis-workspace/data/system/game/powerunit-benchmark.json` | NEW | 74 | 0 |
-| `alfred/server-fixed.js` | MODIFIED | 13 | 1 |
-| `chatui/src/App.tsx` | MODIFIED | 15 | 4 |
-| `Progress.md` | MODIFIED | 1 | 0 |
+| File | Change Type | Key Changes |
+|------|------------|-------------|
+| `docs/economy/powerunit-benchmark.md` | NEW | Scoring model, git history analysis, PU definition |
+| `docs/economy/habitica-powerunit-spec.md` | NEW | Habitica mechanics mapped to Jarvis PU domain |
+| `docs/economy/powerunit-validation.md` | NEW | This file — contract diff, compat checklist |
+| `jarvis-workspace/data/system/game/powerunit-benchmark.json` | NEW | Machine-readable benchmark data |
+| `alfred/server-fixed.js` | MODIFIED | +13 lines: PU constants, snapshot object, deltaPU alias |
+| `chatui/src/App.tsx` | MODIFIED | +16/-5 lines: PowerUnitInfo type, PU display, tightened types |
+| `Progress.md` | MODIFIED | Task start/completion log entries |
