@@ -71,12 +71,13 @@ applyTicketEconomyClaim(ledger, ticketMeta)
 ### Habitica Streak
 
 ```javascript
-// From scoreTask.js
-streakBonus = task.streak / 100
-goldModifier = goldModifier * (1 + streakBonus)
+// From references/habitica/website/common/script/ops/scoreTask.js (lines 134-139)
+const currStreak = direction === 'down' ? task.streak - 1 : task.streak;
+const streakBonus = currStreak / 100 + 1; // 1-day streak = 1.01, 2-day = 1.02
+const afterStreak = gpMod * streakBonus;
 ```
 
-Streak increments on daily completion, resets on miss. Gold bonus grows linearly.
+Streak increments on daily completion, resets on miss. Gold bonus grows linearly (+1% per day).
 
 ### Jarvis PowerUnit Streak
 
@@ -89,14 +90,17 @@ Streak increments when prompt submitted on consecutive days. Max bonus: +40% at 
 
 **Server-side**: `streakDays` exposed via `/api/status` player object. Currently informational only; not yet wired into PU claim calculations.
 
-### Future Integration
+### Future Integration (MVP+1)
 
-Merge streak multiplier into server-side `applyTicketEconomyClaim()`:
+Merge streak multiplier into server-side `applyTicketEconomyClaim()` at line ~370 in `alfred/server-fixed.js`:
 ```
-deltaPU = rawDelta * repeatFactor * softFactor * streakMultiplier
+// Before: deltaPU = rawDelta * repeatFactor * softFactor
+// After:  deltaPU = rawDelta * repeatFactor * softFactor * streakMultiplier
 ```
 
-This is deferred to avoid changing the claim formula in MVP.
+Implementation scope: add `streakDays` lookup from player state, compute `streakMultiplier = 1 + min(0.4, (streakDays - 1) * 0.05)`, apply as final multiplicand before `clamp()`. Single function change, no new API fields needed.
+
+Deferred because: changing the claim formula in MVP risks destabilizing the economy baseline before it has production usage data.
 
 ---
 
@@ -104,7 +108,7 @@ This is deferred to avoid changing the claim formula in MVP.
 
 ### Habitica
 
-- **Task value drift**: `value = value + (delta * 0.9747^|value|)` — high-value tasks drift back toward mean
+- **Task value drift** (scoreTask.js line 36): `nextDelta = 0.9747^currVal` — high-value tasks drift back toward mean
 - **Crit system**: Random crits based on STR stat add bonus reward
 - **No daily cap**: Unlimited scoring (balanced by value drift)
 
@@ -204,7 +208,18 @@ Applied to prompt run XP, not to economy claims. Based on content quality, not r
 1. **Server PU claims**: deltaXP from economy engine (5-100 per claim)
 2. **Client WorkQuest**: prompt run XP from cognitive scoring (variable)
 
-Both feed into `totalXP` but are tracked separately. Future: merge into single server-authoritative source.
+Both feed into `totalXP` but are tracked separately.
+
+### XP Reconciliation Path (Next.js Phase)
+
+To unify into a single server-authoritative XP source:
+1. Move WorkQuest cognitive scoring logic from `App.tsx` into a new server-side function (e.g., `applyPromptXP()`)
+2. Add `promptXP` field to economy ledger `byDay` entries alongside existing `xp` (claim XP)
+3. Compute `totalXP = claimXP + promptXP` server-side in `getEconomySnapshot()`
+4. Deprecate client-side `alfred_workquest_v1` XP fields (keep for backward compat, stop incrementing)
+5. Preserve `alfred_workquest_v1` streak/game state (only XP moves to server)
+
+This is deferred to the Next.js phase because it requires migrating client-side state to server-side persistence, which aligns with the route-handler parity migration.
 
 ---
 
