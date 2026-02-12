@@ -1,6 +1,216 @@
 {
-  "inbox": [],
+  "inbox": [
+    {
+      "id": "capture-1770890447525-32f12631",
+      "type": "log",
+      "content": "/log nespal som celu noc",
+      "source": "legacy-ui",
+      "capturedAt": "2026-02-12T10:00:47.525Z",
+      "processed": false,
+      "priority": "medium",
+      "tags": [
+        "legacy-ui"
+      ],
+      "meta": {
+        "agentId": "default",
+        "slashCommand": {
+          "name": "log",
+          "args": "nespal som celu noc",
+          "raw": "/log nespal som celu noc"
+        }
+      }
+    },
+    {
+      "id": "capture-1770874398855-fb1e6130",
+      "type": "note",
+      "content": "a nmozno by potom stacilo len menit tagy?",
+      "source": "chatui",
+      "capturedAt": "2026-02-12T05:33:18.855Z",
+      "processed": false,
+      "priority": "critical",
+      "tags": [
+        "test.tagSelection"
+      ],
+      "meta": {
+        "category": "action",
+        "questId": null,
+        "rpe": 7,
+        "focusPurity": 20,
+        "cognitiveScore": 37,
+        "vocabScore": 100,
+        "xpAwarded": 18,
+        "criticalHit": false
+      }
+    },
+    {
+      "id": "capture-1770874348116-80688dd3",
+      "type": "note",
+      "content": "a teraz to neni na wqureste a to je popici, ked budu spravne parametre, tak to bude akurat cele \na este ked tuto v content sekcii bude pekny markdown tak to bude este lepsie",
+      "source": "chatui",
+      "capturedAt": "2026-02-12T05:32:28.116Z",
+      "processed": false,
+      "priority": "critical",
+      "tags": [
+        "test"
+      ],
+      "meta": {
+        "category": "action",
+        "questId": null,
+        "rpe": 7,
+        "focusPurity": 20,
+        "cognitiveScore": 50,
+        "vocabScore": 71,
+        "xpAwarded": 20,
+        "criticalHit": false
+      }
+    },
+    {
+      "id": "capture-1770874300278-b6547c3e",
+      "type": "note",
+      "content": "a na toto naviazem quest na boss",
+      "source": "chatui",
+      "capturedAt": "2026-02-12T05:31:40.278Z",
+      "processed": false,
+      "priority": "critical",
+      "tags": [
+        "test"
+      ],
+      "meta": {
+        "category": "action",
+        "questId": "quest-1770874281556-239985",
+        "rpe": 7,
+        "focusPurity": 20,
+        "cognitiveScore": 34,
+        "vocabScore": 86,
+        "xpAwarded": 17,
+        "criticalHit": false
+      }
+    },
+    {
+      "id": "capture-1770874248587-a16cdb43",
+      "type": "note",
+      "content": "cize toto je boss",
+      "source": "chatui",
+      "capturedAt": "2026-02-12T05:30:48.587Z",
+      "processed": false,
+      "priority": "critical",
+      "tags": [
+        "test"
+      ],
+      "meta": {
+        "category": "action",
+        "questId": "quest-1770874226651-21b01f",
+        "rpe": 7,
+        "focusPurity": 20,
+        "cognitiveScore": 31,
+        "vocabScore": 100,
+        "xpAwarded": 18,
+        "criticalHit": false
+      }
+    },
+    {
+      "id": "capture-1770874203290-92f3ee8a",
+      "type": "note",
+      "content": "mame aktivny aj system nonitor \ncize toto by som mohol pouzivat na to aby som sem zapisal veci ktory chcem sprqvit a prisudim im parametre",
+      "source": "chatui",
+      "capturedAt": "2026-02-12T05:30:03.290Z",
+      "processed": false,
+      "priority": "critical",
+      "tags": [
+        "test"
+      ],
+      "meta": {
+        "category": "action",
+        "questId": null,
+        "rpe": 7,
+        "focusPurity": 20,
+        "cognitiveScore": 45,
+        "vocabScore": 96,
+        "xpAwarded": 21,
+        "criticalHit": false
+      }
+    },
+    {
+      "id": "capture-1770874120004-2eb83244",
+      "type": "task",
+      "content": "ano task funguje, to by znamenalo ze ja si kazdy na toto mozem naviazat kvantitativne metriky",
+      "source": "chatui",
+      "capturedAt": "2026-02-12T05:28:40.004Z",
+      "processed": false,
+      "priority": "critical",
+      "tags": [
+        "test"
+      ],
+      "meta": {
+        "category": "action",
+        "questId": null,
+        "rpe": 7,
+        "focusPurity": 20,
+        "cognitiveScore": 42,
+        "vocabScore": 100,
+        "xpAwarded": 18,
+        "criticalHit": false
+      }
+    },
+    {
+      "id": "capture-1770874070865-76c7daee",
+      "type": "task",
+      "content": "dashboard funguje",
+      "source": "chatui",
+      "capturedAt": "2026-02-12T05:27:50.865Z",
+      "processed": false,
+      "priority": "critical",
+      "tags": [
+        "test"
+      ],
+      "meta": {
+        "category": "action",
+        "questId": null,
+        "rpe": 7,
+        "focusPurity": 20,
+        "cognitiveScore": 31,
+        "vocabScore": 100,
+        "xpAwarded": 18,
+        "criticalHit": false
+      }
+    },
+    {
+      "id": "capture-1770874041405-0f6b7fb8",
+      "type": "task",
+      "content": "testujem tiket system",
+      "source": "chatui",
+      "capturedAt": "2026-02-12T05:27:21.405Z",
+      "processed": false,
+      "priority": "critical",
+      "tags": [
+        "test"
+      ],
+      "meta": {
+        "category": "action",
+        "questId": null,
+        "rpe": 7,
+        "focusPurity": 20,
+        "cognitiveScore": 32,
+        "vocabScore": 100,
+        "xpAwarded": 18,
+        "criticalHit": false
+      }
+    }
+  ],
   "autoRules": [],
-  "captureStats": {},
+  "captureStats": {
+    "bySource": {
+      "chatui": 8,
+      "legacy-ui": 1
+    },
+    "byType": {
+      "task": 3,
+      "note": 5,
+      "log": 1
+    },
+    "totalCaptured": 9,
+    "processed": 0,
+    "pending": 9
+  },
   "settings": {}
 }

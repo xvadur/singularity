@@ -1,9 +1,23 @@
 {
-  "queue": [],
+  "queue": [
+    {
+      "id": "cmd-1770890447529-65578d5a",
+      "command": "log",
+      "args": "nespal som celu noc",
+      "raw": "/log nespal som celu noc",
+      "source": "legacy-ui",
+      "threadId": "1770890435580",
+      "sessionKey": "agent:main:webchat:1770890435580",
+      "status": "pending",
+      "createdAt": "2026-02-12T10:00:47.525Z"
+    }
+  ],
   "stats": {
-    "totalQueued": 0,
-    "pending": 0,
-    "byCommand": {},
-    "lastQueuedAt": null
+    "totalQueued": 1,
+    "pending": 1,
+    "byCommand": {
+      "log": 1
+    },
+    "lastQueuedAt": "2026-02-12T10:00:47.525Z"
   }
 }
