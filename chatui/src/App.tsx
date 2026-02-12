@@ -19,6 +19,67 @@ type EventItem = {
   text?: string | null;
 };
 
+type EconomyFlag = 'cap_reached' | 'high_slider' | 'rapid_claims' | 'manual_review';
+
+type TicketEconomyMeta = {
+  ticketId: string;
+  plannedEEU: number;
+  progressPct: number;
+  taskType: 'habit' | 'daily' | 'todo' | 'reward';
+  note?: string;
+};
+
+type EconomyEffect = {
+  deltaEEU: number;
+  deltaXP: number;
+  deltaCoins: number;
+  blocked: boolean;
+  flags: EconomyFlag[];
+  focusMinutesEquivalent: number;
+  progressDelta: number;
+};
+
+type EconomySnapshot = {
+  todayEEU: number;
+  todayXP: number;
+  todayCoins: number;
+  totalXP: number;
+  coinBalance: number;
+  capRemaining: number;
+  recentFlags: Array<{ flag: EconomyFlag; ts: string | null; detail: string | null }>;
+};
+
+type EconomyLedgerEntry = {
+  ts: string;
+  type: 'ticket.claim' | 'shop.purchase' | 'shop.purchase_blocked' | 'daily.roll';
+  payload: Record<string, unknown>;
+};
+
+type ShopTier = 'micro' | 'standard' | 'major';
+
+type CaptureResponse = {
+  ok: boolean;
+  economyEffect?: EconomyEffect;
+  shopPurchase?: {
+    ok: boolean;
+    tier: ShopTier;
+    name: string;
+    price: number;
+    coinBalance: number;
+    reason?: string;
+  } | null;
+  economy?: EconomySnapshot;
+};
+
+type UiMessageRole = 'user' | 'assistant' | 'system';
+
+type UiMessage = {
+  id: string;
+  role: UiMessageRole;
+  text: string;
+  ts: string;
+};
+
 type StatusResponse = {
   timestamp?: string;
   player?: {
@@ -65,6 +126,7 @@ type StatusResponse = {
     sessions: OpenClawSession[];
   };
   systems?: Record<string, boolean>;
+  economy?: EconomySnapshot;
 };
 
 type BackendQuest = {
@@ -160,6 +222,8 @@ type GameState = {
 const GAME_STATE_KEY = 'alfred_workquest_v1';
 const AGENT_MODE_KEY = 'alfred_agent_mode_v1';
 const JARVIS_TOGGLE_KEY = 'alfred_jarvis_toggle_v1';
+const ECONOMY_CACHE_KEY = 'alfred_economy_cache_v1';
+const CHAT_MESSAGE_LOG_KEY = 'alfred_chatui_message_log_v1';
 
 const ACHIEVEMENT_LABELS: Record<AchievementId, string> = {
   first_prompt: 'First Prompt',
@@ -175,6 +239,22 @@ const CATEGORY_HINTS: Record<PromptCategory, string> = {
   action: 'Concrete execution. Highest XP base.',
   planning: 'Planning/reflection. Lower XP, good for alignment.',
   research: 'Research and study. Medium-high XP.'
+};
+
+const SHOP_OPTIONS: Array<{ id: ShopTier; label: string; price: number }> = [
+  { id: 'micro', label: 'Micro Reward', price: 40 },
+  { id: 'standard', label: 'Standard Reward', price: 120 },
+  { id: 'major', label: 'Major Reward', price: 300 }
+];
+
+const DEFAULT_ECONOMY_EFFECT: EconomyEffect = {
+  deltaEEU: 0,
+  deltaXP: 0,
+  deltaCoins: 0,
+  blocked: false,
+  flags: [],
+  focusMinutesEquivalent: 0,
+  progressDelta: 0
 };
 
 function fmt(ts?: string | null) {
@@ -311,6 +391,46 @@ function loadGameState(): GameState {
   }
 }
 
+function loadUiMessageLog(): UiMessage[] {
+  try {
+    const raw = localStorage.getItem(CHAT_MESSAGE_LOG_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as UiMessage[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(row => ({
+        id: String(row?.id || ''),
+        role: (row?.role === 'user' || row?.role === 'assistant' || row?.role === 'system') ? row.role : 'system',
+        text: String(row?.text || ''),
+        ts: String(row?.ts || '')
+      }))
+      .filter(row => row.id && row.text)
+      .slice(0, 80);
+  } catch {
+    return [];
+  }
+}
+
+function normalizeEconomySnapshot(raw: Partial<EconomySnapshot> | null | undefined): EconomySnapshot | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const recentFlags = Array.isArray(raw.recentFlags) ? raw.recentFlags : [];
+  return {
+    todayEEU: Math.max(0, Number(raw.todayEEU || 0)),
+    todayXP: Math.max(0, Number(raw.todayXP || 0)),
+    todayCoins: Number(raw.todayCoins || 0),
+    totalXP: Math.max(0, Number(raw.totalXP || 0)),
+    coinBalance: Math.max(0, Number(raw.coinBalance || 0)),
+    capRemaining: Math.max(0, Number(raw.capRemaining || 0)),
+    recentFlags: recentFlags
+      .map(flag => ({
+        flag: String(flag?.flag || 'manual_review') as EconomyFlag,
+        ts: flag?.ts ? String(flag.ts) : null,
+        detail: flag?.detail ? String(flag.detail) : null
+      }))
+      .slice(0, 8)
+  };
+}
+
 function addAchievement(existing: AchievementId[], id: AchievementId) {
   if (existing.includes(id)) return existing;
   return [...existing, id];
@@ -400,6 +520,23 @@ export default function App() {
   const [newQuestName, setNewQuestName] = useState('');
   const [newQuestSteps, setNewQuestSteps] = useState(6);
   const [newQuestReward, setNewQuestReward] = useState(100);
+  const [ticketId, setTicketId] = useState('');
+  const [ticketTaskType, setTicketTaskType] = useState<TicketEconomyMeta['taskType']>('todo');
+  const [plannedEEU, setPlannedEEU] = useState(120);
+  const [progressPct, setProgressPct] = useState(0);
+  const [shopPurchasing, setShopPurchasing] = useState<ShopTier | null>(null);
+  const [lastEconomyEffect, setLastEconomyEffect] = useState<EconomyEffect | null>(null);
+  const [lastShopMessage, setLastShopMessage] = useState<string | null>(null);
+  const [messageLog, setMessageLog] = useState<UiMessage[]>(() => loadUiMessageLog());
+  const [economyCache, setEconomyCache] = useState<EconomySnapshot | null>(() => {
+    try {
+      const raw = localStorage.getItem(ECONOMY_CACHE_KEY);
+      if (!raw) return null;
+      return normalizeEconomySnapshot(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  });
 
   const [gameState, setGameState] = useState<GameState>(() => loadGameState());
 
@@ -411,6 +548,10 @@ export default function App() {
       if (!res.ok) throw new Error(`status ${res.status}`);
       const data = (await res.json()) as StatusResponse;
       setStatus(data);
+      const snapshot = normalizeEconomySnapshot(data.economy);
+      if (snapshot) {
+        setEconomyCache(snapshot);
+      }
     } catch (e: any) {
       setErr(e?.message || String(e));
     } finally {
@@ -455,6 +596,23 @@ export default function App() {
       // ignore
     }
   }, [gameState]);
+
+  useEffect(() => {
+    if (!economyCache) return;
+    try {
+      localStorage.setItem(ECONOMY_CACHE_KEY, JSON.stringify(economyCache));
+    } catch {
+      // ignore
+    }
+  }, [economyCache]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_MESSAGE_LOG_KEY, JSON.stringify(messageLog.slice(0, 80)));
+    } catch {
+      // ignore
+    }
+  }, [messageLog]);
 
   const parsedTags = useMemo(() => {
     return tags
@@ -535,15 +693,45 @@ export default function App() {
   }, [gameState.runs]);
 
   const badges = useMemo(() => gameState.achievements.map(id => ACHIEVEMENT_LABELS[id]), [gameState.achievements]);
+  const economyView = useMemo(
+    () => normalizeEconomySnapshot(status?.economy || economyCache),
+    [status?.economy, economyCache]
+  );
+
+  const pushUiMessage = useCallback((role: UiMessageRole, text: string) => {
+    const clean = text.trim();
+    if (!clean) return;
+    setMessageLog(prev => ([
+      {
+        id: `msg-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        role,
+        text: clean.slice(0, 4000),
+        ts: new Date().toISOString()
+      },
+      ...prev
+    ].slice(0, 80)));
+  }, []);
+
+  const clearUiMessageLog = useCallback(() => {
+    setMessageLog([]);
+    try {
+      localStorage.removeItem(CHAT_MESSAGE_LOG_KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const submit = useCallback(async () => {
     const text = content.trim();
     if (!text) return;
     const slashCommand = parseSlashCommandInput(text);
+    const normalizedTicketId = ticketId.trim();
+    const shouldAttachTicket = Boolean(!slashCommand && type === 'task' && normalizedTicketId);
     const shouldTriggerJarvis = jarvisArmed;
 
     setErr(null);
     setJarvisLastReply(null);
+    setLastShopMessage(null);
 
     let nextState: GameState | null = null;
     let runMeta: PromptRun | null = null;
@@ -655,6 +843,14 @@ export default function App() {
           args: slashCommand.args
         };
       }
+      if (shouldAttachTicket) {
+        payloadMeta.ticket = {
+          ticketId: normalizedTicketId,
+          plannedEEU: clamp(Math.round(plannedEEU), 1, 1000),
+          progressPct: clamp(Math.round(progressPct), 0, 100),
+          taskType: ticketTaskType
+        } as TicketEconomyMeta;
+      }
 
       const res = await fetch('/api/capture', {
         method: 'POST',
@@ -673,6 +869,19 @@ export default function App() {
       if (!res.ok) {
         const msg = await res.text().catch(() => '');
         throw new Error(msg || `capture ${res.status}`);
+      }
+
+      const captureData = (await res.json()) as CaptureResponse;
+      pushUiMessage('user', text);
+      const effect = captureData.economyEffect || DEFAULT_ECONOMY_EFFECT;
+      setLastEconomyEffect({
+        ...DEFAULT_ECONOMY_EFFECT,
+        ...effect
+      });
+      const snapshot = normalizeEconomySnapshot(captureData.economy);
+      if (snapshot) {
+        setEconomyCache(snapshot);
+        setStatus(prev => (prev ? { ...prev, economy: snapshot } : prev));
       }
 
       if (nextState) {
@@ -697,9 +906,13 @@ export default function App() {
           }
 
           const jarvisData = await jarvisRes.json() as { replyText?: string };
-          setJarvisLastReply(jarvisData?.replyText || 'Jarvis accepted the message.');
+          const replyText = jarvisData?.replyText || 'Jarvis accepted the message.';
+          setJarvisLastReply(replyText);
+          pushUiMessage('assistant', replyText);
         } catch (jarvisError: any) {
-          setErr(`Captured, but Jarvis failed: ${jarvisError?.message || String(jarvisError)}`);
+          const failText = `Captured, but Jarvis failed: ${jarvisError?.message || String(jarvisError)}`;
+          setErr(failText);
+          pushUiMessage('system', failText);
         } finally {
           setJarvisTriggering(false);
           setJarvisArmed(false);
@@ -711,7 +924,7 @@ export default function App() {
     } catch (e: any) {
       setErr(e?.message || String(e));
     }
-  }, [agentMode, category, content, focusPurity, gameState, jarvisArmed, parsedTags, priority, refresh, rpe, selectedQuestId, token, type]);
+  }, [agentMode, category, content, focusPurity, gameState, jarvisArmed, parsedTags, plannedEEU, priority, progressPct, pushUiMessage, refresh, rpe, selectedQuestId, ticketId, ticketTaskType, token, type]);
 
   const createQuest = useCallback(() => {
     const name = newQuestName.trim();
@@ -741,6 +954,61 @@ export default function App() {
       dailyFocusGoal: clamp(Math.round(value), 50, 600)
     }));
   }, []);
+
+  const purchaseShopTier = useCallback(async (tier: ShopTier) => {
+    setErr(null);
+    setShopPurchasing(tier);
+    try {
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (token.trim()) headers.authorization = `Bearer ${token.trim()}`;
+
+      const res = await fetch('/api/capture', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          type: 'reward',
+          priority: 'low',
+          category: ticketCategory,
+          tags: ['shop', tier],
+          content: `Shop purchase request: ${tier}`,
+          source: 'chatui',
+          meta: {
+            shopPurchase: { tier }
+          }
+        })
+      });
+
+      if (!res.ok) {
+        const msg = await res.text().catch(() => '');
+        throw new Error(msg || `capture ${res.status}`);
+      }
+
+      const captureData = (await res.json()) as CaptureResponse;
+      const effect = captureData.economyEffect || DEFAULT_ECONOMY_EFFECT;
+      setLastEconomyEffect({
+        ...DEFAULT_ECONOMY_EFFECT,
+        ...effect
+      });
+      const snapshot = normalizeEconomySnapshot(captureData.economy);
+      if (snapshot) {
+        setEconomyCache(snapshot);
+        setStatus(prev => (prev ? { ...prev, economy: snapshot } : prev));
+      }
+      if (captureData.shopPurchase?.ok) {
+        setLastShopMessage(`${captureData.shopPurchase.name} purchased (-${captureData.shopPurchase.price} coins)`);
+      } else if (captureData.shopPurchase) {
+        setLastShopMessage(`Purchase blocked: ${captureData.shopPurchase.reason || 'manual_review'}`);
+      } else {
+        setLastShopMessage('Purchase request sent.');
+      }
+
+      await refresh();
+    } catch (e: any) {
+      setErr(e?.message || String(e));
+    } finally {
+      setShopPurchasing(null);
+    }
+  }, [refresh, ticketCategory, token]);
 
   return (
     <div className="page">
@@ -918,6 +1186,51 @@ export default function App() {
               />
               <span className="tiny muted">Lower context switching gives bonus XP.</span>
             </label>
+
+            <label className="label">
+              Ticket ID (for EEU claim)
+              <input
+                className="input"
+                value={ticketId}
+                onChange={e => setTicketId(e.target.value)}
+                placeholder="task-2026-02-main-quest"
+              />
+              <span className="tiny muted">Use the same ID on follow-up updates to enable progress claims.</span>
+            </label>
+
+            <label className="label">
+              Ticket Type
+              <select className="select" value={ticketTaskType} onChange={e => setTicketTaskType(e.target.value as TicketEconomyMeta['taskType'])}>
+                <option value="habit">habit</option>
+                <option value="daily">daily</option>
+                <option value="todo">todo</option>
+                <option value="reward">reward</option>
+              </select>
+            </label>
+
+            <label className="label">
+              Planned EEU ({plannedEEU})
+              <input
+                type="range"
+                min={1}
+                max={1000}
+                value={plannedEEU}
+                onChange={e => setPlannedEEU(clamp(Number(e.target.value), 1, 1000))}
+              />
+              <span className="tiny muted">Anchor: 100 EEU = 60 minutes deep focus.</span>
+            </label>
+
+            <label className="label">
+              Ticket Progress ({progressPct}%)
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={progressPct}
+                onChange={e => setProgressPct(clamp(Number(e.target.value), 0, 100))}
+              />
+              <span className="tiny muted">Only the incremental progress delta is rewarded.</span>
+            </label>
           </div>
 
           <label className="label">
@@ -966,6 +1279,38 @@ export default function App() {
               <div>{jarvisLastReply}</div>
             </div>
           ) : null}
+          {lastEconomyEffect ? (
+            <div className="note-box">
+              <div className="tiny muted">Last economy effect</div>
+              <div className="tiny">
+                +{lastEconomyEffect.deltaEEU} EEU · +{lastEconomyEffect.deltaXP} XP · +{lastEconomyEffect.deltaCoins} coins · Focus ~{lastEconomyEffect.focusMinutesEquivalent} min
+              </div>
+              {lastEconomyEffect.flags.length ? (
+                <div className="tiny muted">Flags: {lastEconomyEffect.flags.join(', ')}</div>
+              ) : null}
+            </div>
+          ) : null}
+          {lastShopMessage ? <div className="tiny muted">{lastShopMessage}</div> : null}
+          <div className="note-box">
+            <div className="item-top">
+              <div className="tiny muted">Recent sent messages (persisted)</div>
+              <button className="link-btn" onClick={clearUiMessageLog} disabled={!messageLog.length}>
+                Clear
+              </button>
+            </div>
+            <div className="list compact">
+              {messageLog.slice(0, 8).map(msg => (
+                <div key={msg.id} className="item">
+                  <div className="item-top">
+                    <span className="badge">{msg.role}</span>
+                    <span className="tiny muted mono">{fmt(msg.ts)}</span>
+                  </div>
+                  <div className="item-content">{msg.text}</div>
+                </div>
+              ))}
+              {!messageLog.length ? <div className="tiny muted">No messages yet.</div> : null}
+            </div>
+          </div>
         </section>
 
         <section className="card span-4 right-panel">
@@ -997,6 +1342,49 @@ export default function App() {
                 <div className="metric-row">
                   <span className="muted">Daily Events</span>
                   <strong className="mono">{status?.events?.count ?? '…'}</strong>
+                </div>
+                <div className="note-box">
+                  <div className="tiny muted uppercase">EEU Economy</div>
+                  <div className="metric-row">
+                    <span className="muted">Today EEU</span>
+                    <strong className="mono">{economyView?.todayEEU ?? 0}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span className="muted">Today XP / Coins</span>
+                    <strong className="mono">{economyView?.todayXP ?? 0} / {economyView?.todayCoins ?? 0}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span className="muted">Total XP</span>
+                    <strong className="mono">{economyView?.totalXP ?? 0}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span className="muted">Coin Balance</span>
+                    <strong className="mono">{economyView?.coinBalance ?? 0}</strong>
+                  </div>
+                  <div className="metric-row">
+                    <span className="muted">Daily Cap Remaining</span>
+                    <strong className="mono">{economyView?.capRemaining ?? 0}</strong>
+                  </div>
+                </div>
+                <div className="note-box">
+                  <div className="tiny muted uppercase">Reward Shop</div>
+                  <div className="tiny muted">Simple 3-tier MVP shop (atomic coin debit).</div>
+                  <div className="actions" style={{ marginTop: 8 }}>
+                    {SHOP_OPTIONS.map(option => (
+                      <button
+                        key={option.id}
+                        className="btn"
+                        onClick={() => purchaseShopTier(option.id)}
+                        disabled={Boolean(shopPurchasing)}
+                        title={`${option.label} (${option.price} coins)`}
+                      >
+                        {shopPurchasing === option.id ? 'Processing…' : `${option.label} (${option.price})`}
+                      </button>
+                    ))}
+                  </div>
+                  {economyView?.recentFlags?.length ? (
+                    <div className="tiny muted">Recent flags: {economyView.recentFlags.map(flag => flag.flag).join(', ')}</div>
+                  ) : null}
                 </div>
                 <div className="note-box highlight">
                   <div className="tiny muted uppercase">Jarvis Recommendation</div>
@@ -1322,13 +1710,13 @@ export default function App() {
             <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
               <div className="item" style={{ textAlign: 'center' }}>
                 <div className="tiny muted uppercase">Sleep</div>
-                <div className="bold">{status.life.sleep.hours}h</div>
-                <div className="tiny muted">{status.life.sleep.quality}</div>
+                <div className="bold">{status.life?.sleep?.hours ?? 0}h</div>
+                <div className="tiny muted">{status.life?.sleep?.quality || 'N/A'}</div>
               </div>
               <div className="item" style={{ textAlign: 'center' }}>
                 <div className="tiny muted uppercase">Nutrition</div>
-                <div className="bold">{status.life.nutrition.calories}kcal</div>
-                <div className="tiny muted">{status.life.nutrition.quality}</div>
+                <div className="bold">{status.life?.nutrition?.calories ?? 0}kcal</div>
+                <div className="tiny muted">{status.life?.nutrition?.quality || 'N/A'}</div>
               </div>
               <div className="item" style={{ textAlign: 'center' }}>
                 <div className="tiny muted uppercase">Exercise</div>

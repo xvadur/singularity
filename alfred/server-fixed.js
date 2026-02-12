@@ -24,6 +24,9 @@ const CAPTURE_DIR = path.join(DATA_DIR, 'system', 'capture');
 const CAPTURE_INBOX_PATH = path.join(CAPTURE_DIR, 'inbox.json');
 const COMMAND_QUEUE_PATH = path.join(CAPTURE_DIR, 'commands.json');
 const CHAT_JOURNAL_PATH = path.join(DATA_DIR, 'chat', 'chatui-events.jsonl');
+const GAME_DIR = path.join(DATA_DIR, 'system', 'game');
+const ECONOMY_LEDGER_PATH = path.join(GAME_DIR, 'economy-ledger.json');
+const ECONOMY_EVENTS_PATH = path.join(GAME_DIR, 'economy-events.jsonl');
 const CHAT_DIST_DIR = path.join(__dirname, '..', 'chatui', 'dist');
 const LEGACY_UI_URL = process.env.LEGACY_UI_URL || 'http://127.0.0.1:5175';
 const CAPTURE_TOKEN = process.env.CAPTURE_TOKEN || '';
@@ -40,6 +43,17 @@ const JARVIS_INBOX_CRON_MS = clamp(
 const JARVIS_INBOX_SESSION_KEY = process.env.JARVIS_INBOX_SESSION_KEY || OPENCLAW_DEFAULT_SESSION_KEY;
 const JARVIS_INBOX_PROMPT = process.env.JARVIS_INBOX_PROMPT
   || 'Open capture inbox and pending command queue. Execute what is actionable, then summarize completed and pending actions.';
+const ECONOMY_DAILY_CAP = 2500;
+const ECONOMY_SOFT_START = 1200;
+const ECONOMY_DAY_RESET_HOUR = 3;
+const ECONOMY_MAX_DAYS = 45;
+const ECONOMY_MAX_FLAGS = 120;
+const ECONOMY_MAX_PURCHASES = 80;
+const SHOP_TIERS = Object.freeze({
+  micro: Object.freeze({ id: 'micro', name: 'Micro Reward', price: 40 }),
+  standard: Object.freeze({ id: 'standard', name: 'Standard Reward', price: 120 }),
+  major: Object.freeze({ id: 'major', name: 'Major Reward', price: 300 })
+});
 const LEGACY_TARGET = (() => {
   try {
     return new URL(LEGACY_UI_URL);
@@ -102,6 +116,403 @@ function defaultCommandQueueDoc() {
   };
 }
 
+function localDateKey(date) {
+  const d = (date instanceof Date) ? date : new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function economyDayKey(now) {
+  const d = (now instanceof Date) ? now : new Date(now);
+  const shifted = new Date(d.getTime() - ECONOMY_DAY_RESET_HOUR * 60 * 60 * 1000);
+  return localDateKey(shifted);
+}
+
+function defaultEconomyLedgerDoc() {
+  return {
+    version: 1,
+    totals: { eeu: 0, xp: 0, coins: 0 },
+    coinBalance: 0,
+    byDay: {},
+    recentFlags: [],
+    recentPurchases: [],
+    lastDailyRollKey: null,
+    updatedAt: null
+  };
+}
+
+function normalizeEconomyLedger(doc) {
+  const base = defaultEconomyLedgerDoc();
+  if (!doc || typeof doc !== 'object') return base;
+
+  const totals = (doc.totals && typeof doc.totals === 'object') ? doc.totals : {};
+  const normalized = {
+    version: Number(doc.version || 1),
+    totals: {
+      eeu: Math.max(0, Number(totals.eeu || 0)),
+      xp: Math.max(0, Number(totals.xp || 0)),
+      coins: Math.max(0, Number(totals.coins || 0))
+    },
+    coinBalance: Math.max(0, Number(doc.coinBalance || 0)),
+    byDay: (doc.byDay && typeof doc.byDay === 'object') ? doc.byDay : {},
+    recentFlags: Array.isArray(doc.recentFlags) ? doc.recentFlags : [],
+    recentPurchases: Array.isArray(doc.recentPurchases) ? doc.recentPurchases : [],
+    lastDailyRollKey: (typeof doc.lastDailyRollKey === 'string' && doc.lastDailyRollKey) ? doc.lastDailyRollKey : null,
+    updatedAt: (typeof doc.updatedAt === 'string' && doc.updatedAt) ? doc.updatedAt : null
+  };
+
+  return normalized;
+}
+
+function readEconomyLedger() {
+  return normalizeEconomyLedger(readJSON(ECONOMY_LEDGER_PATH));
+}
+
+function writeEconomyLedger(ledger, nowIso) {
+  const next = normalizeEconomyLedger(ledger);
+  next.updatedAt = nowIso || new Date().toISOString();
+  writeJsonAtomic(ECONOMY_LEDGER_PATH, next);
+  return next;
+}
+
+function getEconomyDayDoc(ledger, dayKey) {
+  if (!ledger.byDay || typeof ledger.byDay !== 'object') ledger.byDay = {};
+  const existing = ledger.byDay[dayKey];
+  if (existing && typeof existing === 'object') {
+    existing.eeu = Math.max(0, Number(existing.eeu || 0));
+    existing.xp = Math.max(0, Number(existing.xp || 0));
+    existing.coins = Number(existing.coins || 0);
+    if (!existing.byTicket || typeof existing.byTicket !== 'object') existing.byTicket = {};
+    if (!Array.isArray(existing.flags)) existing.flags = [];
+    return existing;
+  }
+
+  const created = {
+    eeu: 0,
+    xp: 0,
+    coins: 0,
+    byTicket: {},
+    flags: [],
+    lastUpdatedAt: null
+  };
+  ledger.byDay[dayKey] = created;
+  return created;
+}
+
+function trimEconomyLedger(ledger) {
+  const keys = Object.keys(ledger.byDay || {}).sort();
+  while (keys.length > ECONOMY_MAX_DAYS) {
+    const oldKey = keys.shift();
+    if (!oldKey) break;
+    delete ledger.byDay[oldKey];
+  }
+  if (Array.isArray(ledger.recentFlags) && ledger.recentFlags.length > ECONOMY_MAX_FLAGS) {
+    ledger.recentFlags = ledger.recentFlags.slice(-ECONOMY_MAX_FLAGS);
+  }
+  if (Array.isArray(ledger.recentPurchases) && ledger.recentPurchases.length > ECONOMY_MAX_PURCHASES) {
+    ledger.recentPurchases = ledger.recentPurchases.slice(-ECONOMY_MAX_PURCHASES);
+  }
+}
+
+function pushEconomyFlag(ledger, dayDoc, flag, nowIso, detail) {
+  const row = {
+    id: `flag-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    flag,
+    ts: nowIso,
+    detail: detail || null
+  };
+  dayDoc.flags.push(row);
+  ledger.recentFlags.push(row);
+  return row;
+}
+
+function defaultEconomyEffect() {
+  return {
+    deltaEEU: 0,
+    deltaXP: 0,
+    deltaCoins: 0,
+    blocked: false,
+    flags: [],
+    focusMinutesEquivalent: 0,
+    progressDelta: 0
+  };
+}
+
+function parseTicketMeta(meta) {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
+  const ticket = (meta.ticket && typeof meta.ticket === 'object' && !Array.isArray(meta.ticket)) ? meta.ticket : null;
+  if (!ticket) return null;
+
+  const ticketId = sanitizeThreadId(ticket.ticketId || ticket.id || '');
+  const plannedEEURaw = Number(ticket.plannedEEU);
+  const progressRaw = Number(ticket.progressPct);
+  if (!ticketId || !Number.isFinite(plannedEEURaw) || !Number.isFinite(progressRaw)) return null;
+
+  const taskType = String(ticket.taskType || 'todo').toLowerCase().slice(0, 32);
+  const note = (typeof ticket.note === 'string' && ticket.note.trim()) ? ticket.note.trim().slice(0, 300) : null;
+
+  return {
+    ticketId,
+    plannedEEU: clamp(Math.round(plannedEEURaw), 1, 1000),
+    progressPct: clamp(Math.round(progressRaw), 0, 100),
+    taskType: taskType || 'todo',
+    note
+  };
+}
+
+function parseShopPurchaseMeta(meta) {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
+  const raw = (meta.shopPurchase && typeof meta.shopPurchase === 'object' && !Array.isArray(meta.shopPurchase))
+    ? meta.shopPurchase
+    : null;
+  if (!raw) return null;
+  const tier = String(raw.tier || '').trim().toLowerCase();
+  if (!tier || !SHOP_TIERS[tier]) return null;
+  return { tier };
+}
+
+function getEconomySnapshot(ledger, now) {
+  const resolved = normalizeEconomyLedger(ledger);
+  const dayKey = economyDayKey(now || new Date());
+  const today = getEconomyDayDoc(resolved, dayKey);
+  return {
+    todayEEU: Math.max(0, Number(today.eeu || 0)),
+    todayXP: Math.max(0, Number(today.xp || 0)),
+    todayCoins: Number(today.coins || 0),
+    totalXP: Math.max(0, Number(resolved.totals.xp || 0)),
+    coinBalance: Math.max(0, Number(resolved.coinBalance || 0)),
+    capRemaining: Math.max(0, ECONOMY_DAILY_CAP - Math.max(0, Number(today.eeu || 0))),
+    recentFlags: (resolved.recentFlags || []).slice(-6).reverse().map(flag => ({
+      flag: flag?.flag || 'manual_review',
+      ts: flag?.ts || null,
+      detail: flag?.detail || null
+    }))
+  };
+}
+
+function applyTicketEconomyClaim(ledger, ticketMeta, now) {
+  const effect = defaultEconomyEffect();
+  if (!ticketMeta) return effect;
+
+  const nowDate = (now instanceof Date) ? now : new Date(now || Date.now());
+  const nowIso = nowDate.toISOString();
+  const dayKey = economyDayKey(nowDate);
+  const dayDoc = getEconomyDayDoc(ledger, dayKey);
+  const byTicket = (dayDoc.byTicket && typeof dayDoc.byTicket === 'object') ? dayDoc.byTicket : {};
+  dayDoc.byTicket = byTicket;
+
+  const current = (byTicket[ticketMeta.ticketId] && typeof byTicket[ticketMeta.ticketId] === 'object')
+    ? byTicket[ticketMeta.ticketId]
+    : {
+      lastProgressPct: 0,
+      claims: 0,
+      awardedEEU: 0,
+      taskType: ticketMeta.taskType,
+      plannedEEU: ticketMeta.plannedEEU,
+      lastClaimAt: null
+    };
+
+  const prevProgress = clamp(Number(current.lastProgressPct || 0), 0, 100);
+  const nextProgress = clamp(Number(ticketMeta.progressPct || 0), 0, 100);
+  const deltaProgress = Math.max(0, nextProgress - prevProgress);
+  effect.progressDelta = deltaProgress;
+
+  const dailyBefore = Math.max(0, Number(dayDoc.eeu || 0));
+  const sameTaskClaimsToday = Math.max(0, Number(current.claims || 0));
+  const flags = [];
+
+  if (ticketMeta.plannedEEU >= 900) {
+    flags.push('high_slider');
+    pushEconomyFlag(ledger, dayDoc, 'high_slider', nowIso, `${ticketMeta.ticketId}:${ticketMeta.plannedEEU}`);
+  }
+
+  if (dailyBefore >= ECONOMY_DAILY_CAP) {
+    effect.blocked = true;
+    flags.push('cap_reached');
+    pushEconomyFlag(ledger, dayDoc, 'cap_reached', nowIso, ticketMeta.ticketId);
+    effect.flags = flags;
+    return effect;
+  }
+
+  const rawDelta = Math.round(ticketMeta.plannedEEU * deltaProgress / 100);
+  const repeatFactor = 1 / (1 + 0.15 * sameTaskClaimsToday);
+  let softFactor = 1;
+  if (dailyBefore > ECONOMY_SOFT_START) {
+    softFactor = Math.max(0.30, 1 - ((dailyBefore - ECONOMY_SOFT_START) / (ECONOMY_DAILY_CAP - ECONOMY_SOFT_START)) * 0.70);
+  }
+
+  let deltaEEU = Math.round(rawDelta * repeatFactor * softFactor);
+  const capRemaining = Math.max(0, ECONOMY_DAILY_CAP - dailyBefore);
+  if (deltaEEU > capRemaining) {
+    deltaEEU = capRemaining;
+    flags.push('cap_reached');
+    pushEconomyFlag(ledger, dayDoc, 'cap_reached', nowIso, `${ticketMeta.ticketId}:clamped`);
+  }
+
+  if (sameTaskClaimsToday >= 5) {
+    flags.push('rapid_claims');
+    pushEconomyFlag(ledger, dayDoc, 'rapid_claims', nowIso, ticketMeta.ticketId);
+  }
+
+  if (ticketMeta.plannedEEU >= 900 && sameTaskClaimsToday >= 3) {
+    flags.push('manual_review');
+    pushEconomyFlag(ledger, dayDoc, 'manual_review', nowIso, ticketMeta.ticketId);
+  }
+
+  if (deltaEEU <= 0) {
+    current.lastProgressPct = Math.max(prevProgress, nextProgress);
+    current.plannedEEU = ticketMeta.plannedEEU;
+    current.taskType = ticketMeta.taskType;
+    current.lastClaimAt = nowIso;
+    byTicket[ticketMeta.ticketId] = current;
+    effect.flags = flags;
+    return effect;
+  }
+
+  const curve = Math.log(1 + deltaEEU) / Math.log(1001);
+  const deltaXP = Math.round(5 + 95 * curve);
+  const deltaCoins = Math.round(1 + 19 * curve);
+  const focusMinutesEquivalent = Math.round(deltaEEU * 0.6);
+
+  dayDoc.eeu = dailyBefore + deltaEEU;
+  dayDoc.xp = Math.max(0, Number(dayDoc.xp || 0)) + deltaXP;
+  dayDoc.coins = Number(dayDoc.coins || 0) + deltaCoins;
+  dayDoc.lastUpdatedAt = nowIso;
+
+  ledger.totals.eeu = Math.max(0, Number(ledger.totals.eeu || 0)) + deltaEEU;
+  ledger.totals.xp = Math.max(0, Number(ledger.totals.xp || 0)) + deltaXP;
+  ledger.totals.coins = Math.max(0, Number(ledger.totals.coins || 0)) + deltaCoins;
+  ledger.coinBalance = Math.max(0, Number(ledger.coinBalance || 0)) + deltaCoins;
+
+  current.lastProgressPct = Math.max(prevProgress, nextProgress);
+  current.claims = sameTaskClaimsToday + 1;
+  current.awardedEEU = Math.max(0, Number(current.awardedEEU || 0)) + deltaEEU;
+  current.plannedEEU = ticketMeta.plannedEEU;
+  current.taskType = ticketMeta.taskType;
+  current.lastClaimAt = nowIso;
+  byTicket[ticketMeta.ticketId] = current;
+
+  effect.deltaEEU = deltaEEU;
+  effect.deltaXP = deltaXP;
+  effect.deltaCoins = deltaCoins;
+  effect.focusMinutesEquivalent = focusMinutesEquivalent;
+  effect.flags = flags;
+
+  appendJsonl(ECONOMY_EVENTS_PATH, {
+    id: `econ-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+    ts: nowIso,
+    type: 'ticket.claim',
+    payload: {
+      ticketId: ticketMeta.ticketId,
+      taskType: ticketMeta.taskType,
+      plannedEEU: ticketMeta.plannedEEU,
+      progressPct: nextProgress,
+      deltaProgress,
+      deltaEEU,
+      deltaXP,
+      deltaCoins,
+      flags
+    }
+  });
+
+  return effect;
+}
+
+function applyShopPurchase(ledger, purchaseMeta, now) {
+  if (!purchaseMeta) return null;
+
+  const tier = SHOP_TIERS[purchaseMeta.tier];
+  if (!tier) return null;
+
+  const nowDate = (now instanceof Date) ? now : new Date(now || Date.now());
+  const nowIso = nowDate.toISOString();
+  const dayKey = economyDayKey(nowDate);
+  const dayDoc = getEconomyDayDoc(ledger, dayKey);
+  const currentBalance = Math.max(0, Number(ledger.coinBalance || 0));
+  const canBuy = currentBalance >= tier.price;
+
+  if (!canBuy) {
+    pushEconomyFlag(ledger, dayDoc, 'manual_review', nowIso, `shop:${tier.id}:insufficient`);
+    appendJsonl(ECONOMY_EVENTS_PATH, {
+      id: `econ-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+      ts: nowIso,
+      type: 'shop.purchase_blocked',
+      payload: {
+        tier: tier.id,
+        price: tier.price,
+        coinBalance: currentBalance
+      }
+    });
+    return {
+      ok: false,
+      tier: tier.id,
+      name: tier.name,
+      price: tier.price,
+      coinBalance: currentBalance,
+      reason: 'insufficient_coins'
+    };
+  }
+
+  ledger.coinBalance = currentBalance - tier.price;
+  dayDoc.coins = Number(dayDoc.coins || 0) - tier.price;
+  ledger.recentPurchases.push({
+    id: `shop-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+    ts: nowIso,
+    tier: tier.id,
+    name: tier.name,
+    price: tier.price
+  });
+
+  appendJsonl(ECONOMY_EVENTS_PATH, {
+    id: `econ-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+    ts: nowIso,
+    type: 'shop.purchase',
+    payload: {
+      tier: tier.id,
+      name: tier.name,
+      price: tier.price,
+      coinBalanceAfter: ledger.coinBalance
+    }
+  });
+
+  return {
+    ok: true,
+    tier: tier.id,
+    name: tier.name,
+    price: tier.price,
+    coinBalance: ledger.coinBalance
+  };
+}
+
+function performEconomyDailyRollIfNeeded(now) {
+  const nowDate = (now instanceof Date) ? now : new Date(now || Date.now());
+  const rollKey = economyDayKey(nowDate);
+  const ledger = readEconomyLedger();
+  if (ledger.lastDailyRollKey === rollKey) {
+    return ledger;
+  }
+
+  const previousKey = ledger.lastDailyRollKey;
+  ledger.lastDailyRollKey = rollKey;
+  trimEconomyLedger(ledger);
+  const updated = writeEconomyLedger(ledger, nowDate.toISOString());
+
+  appendJsonl(ECONOMY_EVENTS_PATH, {
+    id: `econ-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+    ts: nowDate.toISOString(),
+    type: 'daily.roll',
+    payload: {
+      rollKey,
+      previousKey
+    }
+  });
+
+  cache.timestamp = 0;
+  return updated;
+}
+
 function parseSlashCommand(rawInput) {
   const input = String(rawInput || '').trim();
   if (!input.startsWith('/')) return null;
@@ -138,6 +549,7 @@ function enqueueJarvisCommand(command) {
 function bootstrapWorkspaceFiles() {
   ensureDirSync(CAPTURE_DIR);
   ensureDirSync(path.dirname(CHAT_JOURNAL_PATH));
+  ensureDirSync(GAME_DIR);
 
   if (!fs.existsSync(CAPTURE_INBOX_PATH)) {
     writeJsonAtomic(CAPTURE_INBOX_PATH, defaultCaptureInboxDoc());
@@ -145,6 +557,16 @@ function bootstrapWorkspaceFiles() {
 
   if (!fs.existsSync(COMMAND_QUEUE_PATH)) {
     writeJsonAtomic(COMMAND_QUEUE_PATH, defaultCommandQueueDoc());
+  }
+
+  if (!fs.existsSync(ECONOMY_LEDGER_PATH)) {
+    const initial = defaultEconomyLedgerDoc();
+    initial.lastDailyRollKey = economyDayKey(new Date());
+    writeJsonAtomic(ECONOMY_LEDGER_PATH, initial);
+  }
+
+  if (!fs.existsSync(ECONOMY_EVENTS_PATH)) {
+    fs.writeFileSync(ECONOMY_EVENTS_PATH, '', 'utf8');
   }
 }
 
@@ -456,6 +878,11 @@ function extractLatestAssistantText(messages, startIndex) {
 // Fetch fresh data from workspace files
 async function fetchStatusData() {
   try {
+    const now = new Date();
+    performEconomyDailyRollIfNeeded(now);
+    const economyLedger = readEconomyLedger();
+    const economySnapshot = getEconomySnapshot(economyLedger, now);
+
     // Read player data
     const player = readJSON(path.join(DATA_DIR, 'xp', 'player.json'));
     const quests = readJSON(path.join(DATA_DIR, 'xp', 'quests.json'));
@@ -464,7 +891,7 @@ async function fetchStatusData() {
     const commandQueue = readJSON(COMMAND_QUEUE_PATH);
     // Get daily log files
     const memoryDir = path.join(WORKSPACE, 'memory');
-    const today = new Date().toISOString().split('T')[0];
+    const today = now.toISOString().split('T')[0];
     const todayLogPath = path.join(memoryDir, `${today}.md`);
     const todayLogExists = fs.existsSync(todayLogPath);
 
@@ -558,7 +985,7 @@ async function fetchStatusData() {
       safeExecJson('openclaw cron list --json', 4000);
 
     return {
-      timestamp: new Date().toISOString(),
+      timestamp: now.toISOString(),
       player: {
         name: player?.player?.name || 'Adam',
         handle: player?.player?.handle || 'XVADUR',
@@ -662,6 +1089,7 @@ async function fetchStatusData() {
         root: WORKSPACE,
         todayLog: { path: todayLogPath, exists: todayLogExists }
       },
+      economy: economySnapshot,
       overview
     };
   } catch (error) {
@@ -707,6 +1135,7 @@ async function getStatusData() {
 }
 
 bootstrapWorkspaceFiles();
+performEconomyDailyRollIfNeeded(new Date());
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -756,10 +1185,18 @@ app.post('/api/capture', (req, res) => {
     const incomingMeta = (body.meta && typeof body.meta === 'object' && !Array.isArray(body.meta))
       ? body.meta
       : null;
+    const ticketMeta = parseTicketMeta(incomingMeta);
+    const shopPurchaseMeta = parseShopPurchaseMeta(incomingMeta);
     const slashCommand = parseSlashCommand(content);
     const typeResolved = slashCommand?.name === 'log' ? 'log' : type;
     const meta = (() => {
       const value = incomingMeta ? { ...incomingMeta } : {};
+      if (ticketMeta) {
+        value.ticket = ticketMeta;
+      }
+      if (shopPurchaseMeta) {
+        value.shopPurchase = shopPurchaseMeta;
+      }
       if (slashCommand) {
         value.slashCommand = {
           name: slashCommand.name,
@@ -770,7 +1207,8 @@ app.post('/api/capture', (req, res) => {
       return Object.keys(value).length ? value : null;
     })();
 
-    const nowIso = new Date().toISOString();
+    const nowDate = new Date();
+    const nowIso = nowDate.toISOString();
     const id = `capture-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
     const sessionKey = resolveJarvisSessionKey(body.sessionKey, threadId);
 
@@ -831,10 +1269,32 @@ app.post('/api/capture', (req, res) => {
       }
     });
 
+    let economyEffect = defaultEconomyEffect();
+    let shopPurchase = null;
+    let economy = getEconomySnapshot(readEconomyLedger(), nowDate);
+    if (ticketMeta || shopPurchaseMeta) {
+      try {
+        performEconomyDailyRollIfNeeded(nowDate);
+        const ledger = readEconomyLedger();
+        if (ticketMeta) {
+          economyEffect = applyTicketEconomyClaim(ledger, ticketMeta, nowDate);
+        }
+        if (shopPurchaseMeta) {
+          shopPurchase = applyShopPurchase(ledger, shopPurchaseMeta, nowDate);
+        }
+        trimEconomyLedger(ledger);
+        const persisted = writeEconomyLedger(ledger, nowIso);
+        economy = getEconomySnapshot(persisted, nowDate);
+      } catch (economyError) {
+        console.warn('Economy update failed:', economyError.message);
+        economyEffect.flags = ['manual_review'];
+      }
+    }
+
     // Invalidate cache so the dashboard updates immediately.
     cache.timestamp = 0;
 
-    return res.json({ ok: true, item: newItem, queuedCommand });
+    return res.json({ ok: true, item: newItem, queuedCommand, economyEffect, shopPurchase, economy });
   } catch (error) {
     console.error('Capture Error:', error);
     return res.status(500).json({
@@ -1126,6 +1586,7 @@ app.listen(PORT, HOST, () => {
 if (JARVIS_INBOX_CRON_ENABLED) {
   const timer = setInterval(() => {
     try {
+      performEconomyDailyRollIfNeeded(new Date());
       const result = triggerJarvisInboxProcessing('cron-3h', false);
       if (result.skipped) {
         console.log('Jarvis inbox cron: skipped (no pending work)');
@@ -1139,6 +1600,16 @@ if (JARVIS_INBOX_CRON_ENABLED) {
 
   if (typeof timer.unref === 'function') timer.unref();
 }
+
+const economyRollTimer = setInterval(() => {
+  try {
+    performEconomyDailyRollIfNeeded(new Date());
+  } catch (error) {
+    console.warn('Economy daily roll check failed:', error.message);
+  }
+}, 5 * 60 * 1000);
+
+if (typeof economyRollTimer.unref === 'function') economyRollTimer.unref();
 
 // Pre-warm cache on startup
 console.log('Pre-warming cache...');

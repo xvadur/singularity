@@ -8,6 +8,7 @@ dist/
 
 # logs
 *.log
+.next/
 
 # env
 .env
@@ -28,3 +29,6 @@ chatui/chatui-legacy-*/
 
 # local multi-agent worktrees
 .worktrees/
+
+# local research clones
+references/

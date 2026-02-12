@@ -24,11 +24,16 @@ Jarvis/Alfred console.
   - `/chat` for new console UI
   - `/legacy` for legacy UI proxy
 - WorkQuest (XP/quests/streak/focus) is already started in `chatui/src/App.tsx`
+- EEU economy ledger is active (additive API fields on `/api/status` and `/api/capture`)
+- Simple reward shop is available through existing capture contract (`meta.shopPurchase`)
 
 ## Workspace Storage
 
 - Default runtime workspace path is `./jarvis-workspace` (inside this repo) when present.
 - Override with `JARVIS_WORKSPACE=/absolute/path` if you want to keep runtime data elsewhere.
+- Economy files:
+  - `jarvis-workspace/data/system/game/economy-ledger.json`
+  - `jarvis-workspace/data/system/game/economy-events.jsonl`
 
 ## Jarvis Inbox Cron
 
