@@ -54,6 +54,8 @@ const SHOP_TIERS = Object.freeze({
   standard: Object.freeze({ id: 'standard', name: 'Standard Reward', price: 120 }),
   major: Object.freeze({ id: 'major', name: 'Major Reward', price: 300 })
 });
+const POWERUNIT_DISPLAY_NAME = 'PowerUnit';
+const POWERUNIT_VERSION = 1;
 const LEGACY_TARGET = (() => {
   try {
     return new URL(LEGACY_UI_URL);
@@ -288,7 +290,15 @@ function getEconomySnapshot(ledger, now) {
       flag: flag?.flag || 'manual_review',
       ts: flag?.ts || null,
       detail: flag?.detail || null
-    }))
+    })),
+    powerUnit: {
+      todayPU: Math.max(0, Number(today.eeu || 0)),
+      totalPU: Math.max(0, Number(resolved.totals.eeu || 0)),
+      dailyCap: ECONOMY_DAILY_CAP,
+      softStart: ECONOMY_SOFT_START,
+      displayName: POWERUNIT_DISPLAY_NAME,
+      version: POWERUNIT_VERSION
+    }
   };
 }
 
@@ -395,6 +405,7 @@ function applyTicketEconomyClaim(ledger, ticketMeta, now) {
   byTicket[ticketMeta.ticketId] = current;
 
   effect.deltaEEU = deltaEEU;
+  effect.deltaPU = deltaEEU;
   effect.deltaXP = deltaXP;
   effect.deltaCoins = deltaCoins;
   effect.focusMinutesEquivalent = focusMinutesEquivalent;
@@ -413,6 +424,7 @@ function applyTicketEconomyClaim(ledger, ticketMeta, now) {
       deltaEEU,
       deltaXP,
       deltaCoins,
+      deltaPU: deltaEEU,
       flags
     }
   });
