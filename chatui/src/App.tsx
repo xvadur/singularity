@@ -31,12 +31,22 @@ type TicketEconomyMeta = {
 
 type EconomyEffect = {
   deltaEEU: number;
+  deltaPU?: number;
   deltaXP: number;
   deltaCoins: number;
   blocked: boolean;
   flags: EconomyFlag[];
   focusMinutesEquivalent: number;
   progressDelta: number;
+};
+
+type PowerUnitInfo = {
+  todayPU: number;
+  totalPU: number;
+  dailyCap: number;
+  softStart: number;
+  displayName: string;
+  version: number;
 };
 
 type EconomySnapshot = {
@@ -47,6 +57,7 @@ type EconomySnapshot = {
   coinBalance: number;
   capRemaining: number;
   recentFlags: Array<{ flag: EconomyFlag; ts: string | null; detail: string | null }>;
+  powerUnit?: PowerUnitInfo;
 };
 
 type EconomyLedgerEntry = {
@@ -1283,7 +1294,7 @@ export default function App() {
             <div className="note-box">
               <div className="tiny muted">Last economy effect</div>
               <div className="tiny">
-                +{lastEconomyEffect.deltaEEU} EEU · +{lastEconomyEffect.deltaXP} XP · +{lastEconomyEffect.deltaCoins} coins · Focus ~{lastEconomyEffect.focusMinutesEquivalent} min
+                +{lastEconomyEffect.deltaPU ?? lastEconomyEffect.deltaEEU} PU · +{lastEconomyEffect.deltaXP} XP · +{lastEconomyEffect.deltaCoins} coins · Focus ~{lastEconomyEffect.focusMinutesEquivalent} min
               </div>
               {lastEconomyEffect.flags.length ? (
                 <div className="tiny muted">Flags: {lastEconomyEffect.flags.join(', ')}</div>
@@ -1344,10 +1355,10 @@ export default function App() {
                   <strong className="mono">{status?.events?.count ?? '…'}</strong>
                 </div>
                 <div className="note-box">
-                  <div className="tiny muted uppercase">EEU Economy</div>
+                  <div className="tiny muted uppercase">PowerUnit Economy</div>
                   <div className="metric-row">
-                    <span className="muted">Today EEU</span>
-                    <strong className="mono">{economyView?.todayEEU ?? 0}</strong>
+                    <span className="muted">Today PU</span>
+                    <strong className="mono">{economyView?.powerUnit?.todayPU ?? economyView?.todayEEU ?? 0}</strong>
                   </div>
                   <div className="metric-row">
                     <span className="muted">Today XP / Coins</span>
