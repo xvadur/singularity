@@ -40,8 +40,8 @@
     { "flag": "manual_review", "trigger": "high_slider + 3+ claims combo" }
   ],
   "commitScoring": [
-    { "hash": "12e8149", "date": "2026-02-11T00:29:49+01:00", "type": "feat", "message": "Initial import: Jarvis Dashboard", "linesAdded": 0, "linesRemoved": 0, "category": "bootstrap", "puEstimate": 80 },
-    { "hash": "5642b39", "date": "2026-02-11T02:58:52+01:00", "type": "chore", "message": "monorepo: alfred + chatui", "linesAdded": 0, "linesRemoved": 0, "category": "architecture", "puEstimate": 200 },
+    { "hash": "12e8149", "date": "2026-02-11T00:29:49+01:00", "type": "feat", "message": "Initial import: Jarvis Dashboard", "linesAdded": 2973, "linesRemoved": 0, "category": "bootstrap", "puEstimate": 80 },
+    { "hash": "5642b39", "date": "2026-02-11T02:58:52+01:00", "type": "chore", "message": "monorepo: alfred + chatui", "linesAdded": 5910, "linesRemoved": 0, "category": "architecture", "puEstimate": 200 },
     { "hash": "1183636", "date": "2026-02-11T05:21:46+01:00", "type": "feat", "message": "wire jarvis chat bridge and add workquest foundations", "linesAdded": 1474, "linesRemoved": 88, "category": "implementation", "puEstimate": 350 },
     { "hash": "c59b5c7", "date": "2026-02-11T05:25:58+01:00", "type": "chore", "message": "surface boss xp panel by default", "linesAdded": 7, "linesRemoved": 7, "category": "config", "puEstimate": 15 },
     { "hash": "c1c61a7", "date": "2026-02-11T05:30:48+01:00", "type": "chore", "message": "simplify repo to alfred chatui legacy layout", "linesAdded": 40, "linesRemoved": 54, "category": "architecture", "puEstimate": 60 },
@@ -58,7 +58,7 @@
     "featureCommits": 6,
     "docsCommits": 2,
     "choreCommits": 4,
-    "totalLinesAdded": 9661,
+    "totalLinesAdded": 18544,
     "totalLinesRemoved": 577,
     "sprintHours": 35,
     "estimatedTotalPU": 2025,

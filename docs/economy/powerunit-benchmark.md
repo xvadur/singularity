@@ -91,8 +91,8 @@ focusMinutes = round(deltaPU * 0.6)   // Focus time equivalent
 
 | Hash | Date | Type | Message | Lines +/- | Category | PU Estimate |
 |------|------|------|---------|-----------|----------|-------------|
-| `12e8149` | 2026-02-11 00:29 | feat | Initial import: Jarvis Dashboard | root | bootstrap | 80 |
-| `5642b39` | 2026-02-11 02:58 | chore | monorepo: alfred + chatui | root | architecture | 200 |
+| `12e8149` | 2026-02-11 00:29 | feat | Initial import: Jarvis Dashboard | +2973 | bootstrap | 80 |
+| `5642b39` | 2026-02-11 02:58 | chore | monorepo: alfred + chatui | +5910 | architecture | 200 |
 | `1183636` | 2026-02-11 05:21 | feat | wire jarvis chat bridge and workquest foundations | +1474/-88 | implementation | 350 |
 | `c59b5c7` | 2026-02-11 05:25 | chore | surface boss xp panel by default | +7/-7 | config | 15 |
 | `c1c61a7` | 2026-02-11 05:30 | chore | simplify repo to alfred chatui legacy layout | +40/-54 | architecture | 60 |
@@ -112,6 +112,8 @@ Estimates are based on:
 - **Category complexity**: architecture/implementation > config/data
 - **Context from commit content**: Reviewed actual changes for effort assessment
 
+> Note: Line counts are from `git show --stat` per commit (non-merge only). The first two commits (`12e8149`, `5642b39`) are root imports that introduce the full initial codebase, so their high line counts reflect project bootstrapping rather than incremental development effort. PU estimates for these commits are intentionally conservative.
+
 ---
 
 ## Iteration 1 Summary
@@ -122,7 +124,7 @@ Estimates are based on:
 | Feature commits | 6 (50%) |
 | Documentation commits | 2 (17%) |
 | Chore commits | 4 (33%) |
-| Total lines added | ~9,661 |
+| Total lines added | ~18,544 |
 | Total lines removed | ~577 |
 | Sprint duration | ~35 hours |
 | Estimated total PU | 2,025 |
@@ -152,4 +154,4 @@ npm run build
 # POST /api/capture -> economy effect
 ```
 
-The scoring model constants are defined in `alfred/server-fixed.js` lines 46-56 and the claim logic in `applyTicketEconomyClaim()` at lines 295-421.
+The scoring model constants are defined in `alfred/server-fixed.js` lines 46-58 and the claim logic in `applyTicketEconomyClaim()` at lines 305-433.
