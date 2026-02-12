@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "createdAt": "2026-02-12T12:00:00.000Z",
+  "tag": "iteration-1-benchmark-2026-02-12",
+  "baselineCommit": "d98f6dc",
+  "branch": "main",
+  "author": "XVADUR",
+  "powerUnitDefinition": {
+    "internalKey": "eeu",
+    "displayName": "PowerUnit",
+    "abbreviation": "PU",
+    "anchor": {
+      "value": 100,
+      "equivalentMinutes": 60,
+      "description": "100 PU = 60 minutes deep focus"
+    },
+    "dailyCap": 2500,
+    "softStart": 1200,
+    "dayResetHour": 3,
+    "retentionDays": 45
+  },
+  "scoringModel": {
+    "baseFormula": "plannedEEU * (deltaProgress / 100)",
+    "repeatFactor": "1 / (1 + 0.15 * claimsToday)",
+    "softFactor": "max(0.30, 1 - ((dailyBefore - 1200) / (2500 - 1200)) * 0.70)",
+    "finalFormula": "clamp(round(rawDelta * repeatFactor * softFactor), 0, capRemaining)",
+    "xpCurve": "round(5 + 95 * (log(1 + deltaPU) / log(1001)))",
+    "coinsCurve": "round(1 + 19 * (log(1 + deltaPU) / log(1001)))",
+    "focusMinutes": "round(deltaPU * 0.6)"
+  },
+  "shopTiers": {
+    "micro": { "name": "Micro Reward", "price": 40 },
+    "standard": { "name": "Standard Reward", "price": 120 },
+    "major": { "name": "Major Reward", "price": 300 }
+  },
+  "auditFlags": [
+    { "flag": "high_slider", "trigger": "plannedEEU >= 900" },
+    { "flag": "cap_reached", "trigger": "daily total >= 2500" },
+    { "flag": "rapid_claims", "trigger": "5+ claims same ticket per day" },
+    { "flag": "manual_review", "trigger": "high_slider + 3+ claims combo" }
+  ],
+  "commitScoring": [
+    { "hash": "12e8149", "date": "2026-02-11T00:29:49+01:00", "type": "feat", "message": "Initial import: Jarvis Dashboard", "linesAdded": 0, "linesRemoved": 0, "category": "bootstrap", "puEstimate": 80 },
+    { "hash": "5642b39", "date": "2026-02-11T02:58:52+01:00", "type": "chore", "message": "monorepo: alfred + chatui", "linesAdded": 0, "linesRemoved": 0, "category": "architecture", "puEstimate": 200 },
+    { "hash": "1183636", "date": "2026-02-11T05:21:46+01:00", "type": "feat", "message": "wire jarvis chat bridge and add workquest foundations", "linesAdded": 1474, "linesRemoved": 88, "category": "implementation", "puEstimate": 350 },
+    { "hash": "c59b5c7", "date": "2026-02-11T05:25:58+01:00", "type": "chore", "message": "surface boss xp panel by default", "linesAdded": 7, "linesRemoved": 7, "category": "config", "puEstimate": 15 },
+    { "hash": "c1c61a7", "date": "2026-02-11T05:30:48+01:00", "type": "chore", "message": "simplify repo to alfred chatui legacy layout", "linesAdded": 40, "linesRemoved": 54, "category": "architecture", "puEstimate": 60 },
+    { "hash": "fd8b073", "date": "2026-02-11T05:32:20+01:00", "type": "chore", "message": "track single legacy chatui source folder", "linesAdded": 4513, "linesRemoved": 2, "category": "preservation", "puEstimate": 40 },
+    { "hash": "7832331", "date": "2026-02-12T00:40:23+01:00", "type": "feat", "message": "add jarvis toggle flow and workspace capture pipeline", "linesAdded": 761, "linesRemoved": 58, "category": "implementation", "puEstimate": 300 },
+    { "hash": "aec9bdf", "date": "2026-02-12T00:40:28+01:00", "type": "feat", "message": "enhance dashboard readability and ticket capture UX", "linesAdded": 599, "linesRemoved": 266, "category": "implementation", "puEstimate": 250 },
+    { "hash": "ed11072", "date": "2026-02-12T01:05:29+01:00", "type": "docs", "message": "add Discovery Research Plan and Progress framework", "linesAdded": 252, "linesRemoved": 0, "category": "documentation", "puEstimate": 120 },
+    { "hash": "0a1c121", "date": "2026-02-12T01:13:39+01:00", "type": "docs", "message": "populate Discovery.md with Jarvis Dashboard plan", "linesAdded": 40, "linesRemoved": 33, "category": "documentation", "puEstimate": 80 },
+    { "hash": "b786fe6", "date": "2026-02-12T11:33:29+01:00", "type": "feat", "message": "finalize iteration1 code and docs baseline", "linesAdded": 1721, "linesRemoved": 62, "category": "implementation", "puEstimate": 500 },
+    { "hash": "d98f6dc", "date": "2026-02-12T11:33:35+01:00", "type": "chore", "message": "snapshot iteration1 runtime workspace data", "linesAdded": 254, "linesRemoved": 7, "category": "data", "puEstimate": 30 }
+  ],
+  "iteration1Summary": {
+    "totalCommits": 12,
+    "featureCommits": 6,
+    "docsCommits": 2,
+    "choreCommits": 4,
+    "totalLinesAdded": 9661,
+    "totalLinesRemoved": 577,
+    "sprintHours": 35,
+    "estimatedTotalPU": 2025,
+    "keyDeliverables": [
+      "EEU economy engine with deterministic scoring",
+      "14 interview rounds locked in Discovery.md",
+      "API contracts: /api/capture and /api/status",
+      "Habitica mechanics extraction in Research.md",
+      "3-tier shop system with coin economy",
+      "Anti-inflation guardrails (repeat factor, soft/hard cap, flags)"
+    ]
+  }
+}
