@@ -47,6 +47,7 @@ Granular execution tracker: phases -> tasks -> subtasks with live status.
 - [!] None
 
 ## Daily Log
+- `2026-02-12`: Completed Iteration 1 benchmark freeze + Next.js strangler bootstrap + initial Figma node implementation planning (tag `iteration-1-benchmark-2026-02-12`, branch `codex/next-iteration-bootstrap`, Next parity slice for `/api/status` and `/api/capture`, Three.js baseline flag, node `131-8996` screenshot/context breakdown); `npm run build` and `npm run build:next` passed.
 - `2026-02-12`: Started Iteration 1 benchmark freeze + Next.js strangler bootstrap + Figma-driven migration planning.
 - `2026-02-12`: Completed fix for ChatUI message persistence on page refresh (added persisted message log `alfred_chatui_message_log_v1`, safe hydration, clear control, and capture/Jarvis message appends); build passed.
 - `2026-02-12`: Started fix for ChatUI message persistence on page refresh (persist sent message log in localStorage with safe hydration, no change to `alfred_workquest_v1`).

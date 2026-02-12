@@ -1,0 +1,37 @@
+:root {
+  color-scheme: dark;
+  --bg-base: #050b15;
+  --text-base: #edf4ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  color: var(--text-base);
+  background:
+    radial-gradient(120% 80% at 10% -5%, rgba(58, 132, 255, 0.18), transparent 58%),
+    radial-gradient(90% 72% at 95% 0%, rgba(23, 193, 181, 0.12), transparent 52%),
+    linear-gradient(180deg, #040913, var(--bg-base));
+  font-family:
+    var(--font-geist-sans),
+    "IBM Plex Sans",
+    "Source Sans 3",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+

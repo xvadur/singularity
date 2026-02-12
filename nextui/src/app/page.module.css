@@ -1,0 +1,124 @@
+.pageShell {
+  position: relative;
+  min-height: 100vh;
+  padding: 40px 16px 72px;
+}
+
+.ambientGlow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(74, 208, 255, 0.28), transparent 48%),
+    radial-gradient(circle at 80% 10%, rgba(42, 97, 255, 0.18), transparent 44%),
+    radial-gradient(circle at 50% 90%, rgba(86, 255, 222, 0.12), transparent 38%);
+  pointer-events: none;
+}
+
+.main {
+  position: relative;
+  z-index: 1;
+  width: min(980px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.panel {
+  border: 1px solid rgba(107, 160, 255, 0.24);
+  background: rgba(9, 20, 37, 0.68);
+  border-radius: 16px;
+  padding: 18px;
+  backdrop-filter: blur(10px);
+}
+
+.kicker {
+  margin-bottom: 8px;
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #80cfff;
+}
+
+.meta {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #b6c9e8;
+}
+
+.panel h1 {
+  font-size: clamp(1.35rem, 2.7vw, 2rem);
+  margin-bottom: 12px;
+}
+
+.panel h2 {
+  font-size: 1.05rem;
+  margin-bottom: 10px;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  border: 1px solid rgba(107, 160, 255, 0.2);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(8, 15, 29, 0.74);
+}
+
+.metric span {
+  display: block;
+  font-size: 12px;
+  color: #93b1da;
+  margin-bottom: 4px;
+}
+
+.metric strong {
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.captureForm {
+  display: grid;
+  gap: 10px;
+}
+
+.captureForm label {
+  font-size: 13px;
+  color: #9ec1f0;
+}
+
+.captureForm textarea {
+  min-height: 100px;
+  border: 1px solid rgba(110, 170, 255, 0.28);
+  background: rgba(2, 8, 16, 0.68);
+  color: #e8f2ff;
+  border-radius: 12px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.captureForm button {
+  width: fit-content;
+  border: 1px solid rgba(106, 180, 255, 0.55);
+  background: linear-gradient(90deg, #0f3260, #1d4c8e);
+  color: #eaf2ff;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.captureForm button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #ff9696;
+  font-size: 13px;
+}
+
