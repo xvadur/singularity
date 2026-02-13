@@ -416,6 +416,329 @@ Single source of truth for product intent, scope, architecture, integrations, UX
   5. Lock anti-inflation defaults to `softStart=1200`, `hardCap=2500`, plus audit flags.
   6. Lock shop MVP to fixed 3-tier catalog (`Micro 40`, `Standard 120`, `Major 300` coins).
 
+### `2026-02-13` Interview Round 15 (Ultimate Schema v1: Morning Brief + Tags + Global KPI Header)
+- User inputs:
+  - Morning Brief gating: mandatory by default; `/chat` unlock requires brief completion or explicit skip with required reason (one-line prompt shown after pressing Skip).
+  - Morning Brief fields:
+    - required `title`,
+    - required `tag`,
+    - `promise` (note attached to title) with max `500 words`,
+    - `mood` slider `1-100`,
+    - `dayDifficulty` slider `1-100`.
+  - Tag behavior: `B` (pick from a fixed list + allow custom tag input).
+  - Tag taxonomy updates:
+    - rename `jedlo` -> `vitals`,
+    - add `financie`, `uspechy`, `neuspechy`.
+  - KPI header: `A` (sticky global KPI header on all routes).
+- Round 15 summary:
+  - Morning Brief is locked as a daily planning artifact that is visible on Dashboard and can segment the `/chat` feed via `tag`.
+  - Global KPI header is part of the runtime shell, not route-local UI.
+- Implementation impact:
+  - Add strict Morning Brief validation (required fields + word cap) and persist skip reasons.
+  - Establish a canonical tag list with optional freeform tags for edge cases.
+  - Implement a sticky KPI header in the app shell across routes with responsive behavior.
+
+### `2026-02-13` Interview Round 16 (Rapid ABCD Mode)
+- User inputs:
+  - KPI refresh policy: custom override (not A/B/C/D) => refresh every `60s`.
+  - KPI feedback behavior: show delta diff on refresh for each KPI metric (example `+123` in green for increases).
+  - Roadmap note: additional KPI metrics can be added later; keep current implementation extensible.
+  - Interview choice format update: use numbered options `1/2/3/4` for rapid rounds.
+  - Morning Brief `promise` word limit behavior: `A` (hard stop input at `500` words; cannot type beyond cap).
+  - Morning Brief `tag` behavior: `B` (select from canonical list with optional custom tag entry).
+  - Morning Brief skip persistence: store skipped entry in the same Morning Brief storage location (empty brief payload + required `skipReason`).
+  - Morning Brief `title` validation: max `120` characters.
+  - Morning Brief `title` minimum: no explicit minimum length beyond non-empty trimmed value.
+  - Post-brief `/chat` opening state: `2` (today feed with sticky summary card at top).
+  - Sticky summary behavior: always open (`1`), no collapse mode.
+  - Sticky summary visible fields: `title`, `promise snippet`, `mood`, `expectedDifficulty`, `actualDifficulty` (custom override).
+  - `actualDifficulty` policy (custom override):
+    - computed automatically at day-close from collected daily materials/events,
+    - still computed when `expectedDifficulty` is missing (including skipped brief days),
+    - skipping Morning Brief applies explicit damage/penalty.
+  - Skip penalty profile: `1` (fixed small penalty; no percentage component).
+  - Skip penalty amount: `2` => `-10 XP` per skipped Morning Brief.
+  - Skip penalty UX visibility: `2` (instant toast on skip + repeated in day-close summary).
+  - KPI diff color semantics: `1` (`+` green, `-` red, `0` neutral).
+  - KPI diff baseline: `1` (compare against previous 60s refresh snapshot).
+  - KPI diff reset behavior: `1` (no reset on route change; continuous between poll snapshots).
+  - `/tasks` inbox preview ordering (Q18): custom `1 + 4` => default sort by recency with optional manual reorder controls.
+  - One-click promote default target status (Q19): `1` => `Todo`.
+  - One-click promote default priority (Q20): `1` => `Medium`.
+  - Slash-command lifecycle timeline (custom override for Q21): `Accepted -> Plan -> Execution -> Measurement -> Done`.
+  - Command failure visibility (Q22): `1` => show error only on the specific command block in feed.
+  - Failed command recovery (Q23): `4` => auto-retry without explicit user action.
+  - Auto-retry limit (Q24): `4` => no retry cap (continuous retry until success/terminal external stop).
+  - Conflict note: this Q24 decision overrides earlier capped-retry assumptions for command execution flow in this interview track.
+  - Auto-retry interval (Q25): `1` => fixed `30s` between retry attempts.
+  - Retry cap correction (Q26 custom override): hard limit `20` attempts per failed command.
+  - Conflict note update: this Q26 decision supersedes Q24 unlimited-retry assumption.
+  - Post-cap failure handling (Q27): `1` => mark `failed-final` and expose manual retry action only.
+  - BottomCaptureBar mode memory (Q28 corrected): `2` => reset to `Capture` each morning after Morning Brief completion.
+  - 03:00 day-sealed archive visibility (Q29): `1` => render only in `/chat` feed.
+  - V1 sign-off acceptance scope (Q30 custom override): implement all acceptance flows (`Morning Brief`, `Command lifecycle`, `Task board/promote`, `KPI refresh+diff`) with no down-selection.
+- Round 16 summary:
+  - KPI update cadence is intentionally slower (`60s`) to reduce noise, with explicit visual delta to preserve perceived liveness.
+  - Morning Brief text cap is strict at input-time for predictability.
+  - Tag model remains controlled but flexible via custom fallback.
+  - Skip flow is treated as first-class Morning Brief record state, not a separate transient UI event.
+  - Title input is concise by design with a strict max-length cap.
+  - Title validation is permissive on minimum length to keep morning flow fast.
+  - Post-brief chat entry prioritizes daily context with persistent summary visibility.
+  - Summary visibility is mandatory to preserve daily orientation.
+  - Daily summary must show both planned and realized difficulty signals.
+  - Actual difficulty is system-derived at closure-time, not manually entered.
+  - Brief skip remains allowed but has gameplay cost.
+  - Skip penalty model is simple and deterministic (flat small deduction).
+  - Current tuned skip penalty is `-10 XP`.
+  - Penalty feedback must be immediate and end-of-day auditable.
+  - KPI deltas require explicit positive/negative/neutral visual semantics.
+  - KPI diffs represent short-interval movement, not full-day cumulative change.
+  - Route navigation does not alter KPI diff continuity.
+  - Inbox preview stays fast by default (recency) while allowing operator override when needed.
+  - Promote flow aligns with MVP 3-status board by entering at `Todo`.
+  - Promote flow uses a stable default priority for quick conversion from inbox.
+  - Command lifecycle should expose reasoning/execution checkpoints, not only queue status.
+  - Failure context should stay local to the failed command artifact.
+  - Retry strategy is automation-first, not manual interaction-first.
+  - Command retry behavior is bounded with a clear max-attempt guard.
+  - Retry cadence is aggressive and predictable with short fixed delay.
+  - Terminal failure state should remain operator-controllable with explicit manual restart.
+  - Capture-bar mode should be normalized daily after brief ritual.
+  - Day-sealed archive is treated as timeline artifact primarily for chat/runtime context.
+  - V1 completion is defined by full-scope behavior delivery, not partial acceptance subset.
+- Implementation impact:
+  - Add periodic status refresh timer (`60s`) in global KPI data source.
+  - Store previous KPI snapshot to compute per-metric delta and render signed diff styling.
+  - Enforce 500-word cap directly in Morning Brief input control with live word counter.
+  - Provide canonical tag picker with optional freeform custom-tag field.
+  - Persist skipped Morning Brief as `status=skipped` in the same data stream used by completed Morning Brief entries.
+  - Enforce title `maxlength=120` with visible remaining-character counter.
+  - Validate title as non-empty after trim, without additional minimum-length rule.
+  - Render sticky daily summary card at top of today's runtime feed after successful brief completion.
+  - Keep summary card permanently expanded in `/chat`.
+  - Support dual difficulty fields in summary rendering (`expected` at brief time, `actual` as later update).
+  - Add day-close scoring step that derives `actualDifficulty` from daily data before archive/close finalization.
+  - Apply damage rule on skipped-brief days while keeping closure pipeline deterministic.
+  - Implement skip damage as a fixed-value deduction and expose value for later tuning.
+  - Use default skip penalty constant `10 XP` in scoring pipeline.
+  - Emit skip-penalty toast event immediately and include same deduction in day-close recap payload.
+  - Render KPI diff badges with tri-state color mapping (`positive`, `negative`, `neutral`).
+  - Compute KPI delta from last poll snapshot stored in client state (`60s` cadence).
+  - Keep KPI diff state in shared app-shell scope so route transitions do not reset it.
+  - Implement inbox preview as recency-sorted list with user-driven reorder persistence.
+  - Set promote action default status mapping to `Todo` and keep override optional.
+  - Set promote action default priority mapping to `Medium`.
+  - Map slash-command UI state machine to five visible stages: `Accepted`, `Plan`, `Execution`, `Measurement`, `Done`.
+  - Attach command failure payload/rendering to the originating feed block without separate global alert dependency.
+  - Implement automatic retry scheduling for failed command blocks with status updates reflected in the same feed artifact.
+  - Enforce retry attempt counter with hard stop at `20` attempts.
+  - Use fixed retry scheduler tick at `30s` for auto-retry loop.
+  - After max retries, transition command status to `failed-final` and enable manual retry trigger.
+  - Reset BottomCaptureBar active mode to `Capture` on daily brief completion boundary.
+  - Emit/render day-sealed archive item in `/chat` feed without duplicating card on dashboard.
+  - Keep all four acceptance flow tracks in implementation checklist and release gate.
+
+### `2026-02-13` Interview Round 17 (Design Iteration v2: Pencil Capture Surface)
+- User inputs:
+  - Capture interaction model:
+    - primary input should be a floating bottom capture bar,
+    - quick-action buttons and keyboard shortcut affordances should be visible in this bar.
+  - App tab structure for v2 focus:
+    - `Dashboard`,
+    - `Capture` (timeline/day log, primary writing surface),
+    - `Tasks`.
+  - Capture timeline semantics:
+    - `Capture` tab acts as the daily log stream where user writes all runtime notes/events.
+  - Floating capture bar category buttons:
+    - `tasks`,
+    - `business`,
+    - `daily`,
+    - `vitals`,
+    - `expense`,
+    - `win`,
+    - `loss`.
+  - Evening Brief requirement:
+    - add Evening Brief with behavior similar to Morning Brief,
+    - trigger window begins at `20:00 local`,
+    - if user tries to write into capture after `20:00`, Evening Brief prompt should appear first.
+  - Evening Brief policy decision: `1` => mandatory with skip allowed only with required reason (parity with Morning Brief skip model).
+  - Evening popup behavior (consolidated):
+    - after `20:00`, any write attempt in capture opens Evening Brief popup,
+    - popup can be dismissed by outside click,
+    - dismissal is temporary; popup re-opens on the next write attempt until Evening Brief is completed or skipped with reason.
+  - Evening Brief content contract (custom override):
+    - editable fields: `title`, `reflection/comment`,
+    - `title` max length is `120` characters (parity with Morning Brief),
+    - `reflection/comment` requires minimum `500` words,
+    - `reflection/comment` has no upper word limit,
+    - computed read-only fields: `actualDifficulty` (derived from tracked metrics), `expense` (derived from expense log),
+    - computed fields are not user-editable in Evening Brief form.
+  - Evening card requirement:
+    - Evening Brief should generate a card analogous to Morning card,
+    - card should summarize full-day tracked parameters plus user commentary.
+  - Brief card placement override (v2 correction):
+    - remove floating/pinned brief cards from timeline surfaces,
+    - both `Morning Brief` and `Evening Brief` cards are rendered only on `Dashboard`.
+  - Dashboard brief-card visibility policy (v2 correction):
+    - show `Morning Brief` and `Evening Brief` cards together during the day,
+    - day-cycle rotation boundary is fixed at `03:00 local` for the next daily brief set.
+  - Dashboard activity log requirement (custom override):
+    - add a dedicated `Notification Center / Activity Log` panel on Dashboard,
+    - log all relevant system/runtime events as user-facing notifications,
+    - activity log acts as canonical dashboard event stream (newest first),
+    - default visible list size is last `7` events,
+    - no `Show all` expansion in Dashboard v2 scope,
+    - mandatory event scope: brief/gate, command lifecycle, penalties/refunds, task changes, system health, and periodic KPI diff updates.
+  - Notification visual priority policy: `1` => color-code events by type (`XP`, `Task`, `System`, `Brief`).
+  - Notification type-color map (fixed): `2` => `XP=blue`, `Task=green`, `System=red`, `Brief=amber`.
+  - Notification timestamp format policy: `4` => conditional format (`relative` for items newer than `24h`, otherwise `absolute` date/time).
+  - Notification row click behavior policy (custom override):
+    - click opens contextual navigation to related feed/tab (`task`, `brief`, `capture`, or `system` target),
+    - destination should open in its global/default feed view,
+    - referenced entity/event should be visually highlighted in that feed (no hard filter lock).
+  - KPI diff notification trigger policy (custom override):
+    - KPI diff events are tied to XP progression rather than pure time cadence,
+    - emit notification on diff update only when XP gain reaches at least `+5 XP`,
+    - aggregate XP gain into a single notification event (e.g., `+12 XP` stays one event),
+    - notification payload should include XP source context (`words`, `task`, `milestone`, `expectedXP-goal`),
+    - notification payload should include remaining progress toward daily `expectedXP` target.
+  - 03:00 rollover policy for unfinished Evening Brief: `2` => carry over to next day and block Morning Brief until Evening Brief is resolved.
+  - Morning-blocked entry UX when Evening carry-over is active: `3` => redirect user to `Capture` and immediately present Evening popup.
+  - Carry-over brief sequence contract (custom override):
+    - on first write intent of new day with carry-over, show Evening popup first,
+    - after successful Evening submit, immediately show Morning popup in the same flow,
+    - only after completing/skipping both required gates is normal capture writing unlocked.
+  - Carry-over popup dismissal behavior:
+    - outside-click may temporarily dismiss current popup,
+    - next write attempt re-opens required pending popup (`Evening` first, then `Morning`).
+  - Carry-over penalty contract (custom override):
+    - unresolved carry-over state applies `damage = -10`,
+    - skip in this carry-over gate flow applies `damage = -30`.
+  - Carry-over penalty recovery policy: `1` => if both carry-over gates (`Evening` then `Morning`) are completed within the same day, the `-10` carry damage is refunded.
+  - Floating bar visibility scope: `1` => visible across all primary tabs (`Dashboard`, `Capture`, `Tasks`).
+  - Floating capture routing behavior (custom override):
+    - default capture mode routes to `daily` stream (continuous mental/day-log writing),
+    - clicking a category button changes capture mode visual state (including color),
+    - after submit, the entry is persisted to the selected category destination.
+  - Post-evening-submit capture behavior: `1` => floating capture bar unlocks immediately for normal writing flow.
+  - Floating bar shortcuts (custom override):
+    - fixed mappings based on underlined initial letter in each category label,
+    - shortcut hints should be visibly underlined on the corresponding category trigger.
+  - Capture timeline filtering contract (custom override):
+    - top row contains category pills with prompt counts per feed,
+    - include explicit `all` pill as default feed reset,
+    - timeline area below pills shows chronologically ordered records with category color coding,
+    - clicking capture mode (from floating bar) while on timeline switches active timeline feed to that category,
+    - clicking category pill switches timeline feed to the selected category.
+  - Capture layout extension:
+    - `Capture` route includes right sidebar with writing/usage metrics (word counts and related stats).
+  - Capture right-sidebar metrics contract (custom override, ordered top -> bottom):
+    - live compose counter while typing (`characters`),
+    - words written today,
+    - prompts sent today,
+    - words written in last 24h,
+    - cumulative words vs remaining to daily goal `2500` (XP derivation baseline),
+    - 6-hour activity chart:
+      - x-axis = last 6 hours (hour buckets),
+      - y-axis = counts,
+      - per hour show paired bars (`words`, `prompts`),
+      - newest data fills left-to-right as each hour progresses,
+    - global prompt timeline:
+      - ordered newest -> oldest,
+      - each item rendered with node/dot + vertical connector line,
+      - label shows first 5 words + timestamp.
+  - 6-hour chart window policy: `1` => fixed rolling window of last 6 closed hours.
+  - Metrics scope policy:
+    - sidebar metrics are global/day-oriented by default,
+    - category pill changes switch feed content, not the global metrics baseline.
+  - Morning Brief XP contract extension (custom override):
+    - Morning Brief includes `expectedXP`/expected output requirement used as multiplier eligibility gate,
+    - `expectedXP` range is locked to `0-1000`,
+    - `expectedXP` input control is slider (`0-1000`),
+    - multiplier is awarded for meeting day parameters defined in Morning Brief and baseline XP system,
+    - baseline XP parameter model remains an explicit follow-up definition item.
+- Round 17 summary:
+  - Capture is now explicitly a persistent, floating command surface and not a route-local static form.
+  - The `Capture` route is the main daily narrative/timeline feed.
+  - Evening ritual is now a first-class UX gate similar to Morning Brief.
+  - Evening gate follows the same strictness and auditability rules as morning flow.
+  - Evening gate interception is persistent after cutoff and outside-click dismissal is temporary until resolved.
+  - Evening Brief shifts from planning to automated end-of-day assessment with user reflection.
+  - Evening reflection is long-form by requirement (minimum 500 words).
+  - Reflection capture is intentionally unbounded for deep end-of-day journaling.
+  - Evening title stays concise with Morning-parity max length.
+  - Brief cards become dashboard-only artifacts rather than timeline-pinned elements.
+  - Dashboard brief section uses concurrent Morning+Evening visibility with a `03:00` day-rotation boundary.
+  - Dashboard becomes both control surface and system-observability surface through centralized notifications.
+  - Dashboard notification surface is compact by default (7 most recent items).
+  - Notification center remains intentionally non-expandable on Dashboard.
+  - Notification stream is full-scope and includes KPI header diff events.
+  - KPI-diff notifications are value-significant (`+5 XP`) instead of noise-heavy periodic logging.
+  - XP notifications should be source-aware and goal-progress-aware for decision usefulness.
+  - Event scanning speed relies on stable type-color mapping.
+  - Type-color legend is fixed for consistent recognition across sessions.
+  - Notification time parsing should favor quick recency scan for fresh items and explicit date/time clarity for older items.
+  - Notification list acts as actionable routing surface to the originating domain with in-feed contextual highlight, not read-only history.
+  - Cross-day continuity favors unresolved-evening-first gating over silent closure.
+  - Carry-over resolution starts in Capture flow, not on passive dashboard view.
+  - Carry-over operates as a strict sequential gate: Evening before Morning.
+  - Carry-over penalties are stronger for explicit skip than for carry state itself.
+  - Carry penalty becomes recoverable through same-day compliance.
+  - Capture entry point remains spatially consistent across routes.
+  - Capture affordance is intentionally omnipresent for low-friction logging.
+  - Category selection in floating bar acts as explicit routing intent before submit.
+  - Shortcut memorability is tied to visible first-letter mnemonic cues.
+  - Timeline navigation should remain category-aware while preserving one-feed-at-a-time reading mode.
+  - Evening completion should not impose additional writing lock after successful submit.
+  - Metrics rail is a constant observational layer: live compose + day progress + short-range trend + full prompt history.
+  - Morning Brief evolves into explicit XP expectation contract, not only narrative planning.
+  - XP expectation budget is constrained to a bounded `0-1000` planning range.
+  - XP expectation entry is optimized for quick planning via slider control.
+  - Hourly chart semantics prioritize stable closed buckets over live partial-hour volatility.
+- Implementation impact:
+  - Implement a global floating capture bar component in runtime shell with mode shortcuts and button actions.
+  - Narrow primary navigation emphasis to three core tabs while preserving deeper thread/category access in capture actions.
+  - Add evening-gate state machine (`after 20:00` + pre-capture interception) parallel to Morning Brief gating logic.
+  - Reuse brief skip-reason validation/persistence rules for Evening Brief to keep behavior consistent.
+  - Enforce pre-capture guard check after `20:00` on each write intent until evening state becomes `completed|skipped`.
+  - Support outside-click popup collapse while keeping mandatory re-open on subsequent write intents after cutoff.
+  - Implement Evening Brief view-model with mixed editable/computed fields and explicit read-only rendering for computed values.
+  - Validate Evening title length with `maxlength=120`.
+  - Enforce Evening reflection validator with hard minimum `500` words before submit.
+  - Do not enforce max-length truncation on Evening reflection field.
+  - Add Evening summary card composition pipeline based on daily metrics + reflection text.
+  - Render Morning/Evening brief cards only in dashboard card stack and remove timeline pinning behavior.
+  - Add daily-card rotation logic tied to `03:00 local` boundary while keeping both cards visible during active day.
+  - Add dashboard notification-center data model and rendering for runtime events (brief gates, penalties/refunds, command/task/system events).
+  - Set notification-center default query/window to latest seven events.
+  - Keep dashboard notification rendering fixed-size (7) with no full-log expansion control.
+  - Include KPI diff deltas as notification event type in the same dashboard activity stream.
+  - Gate KPI diff notification writes behind XP threshold check (`>= +5 XP` per diff update).
+  - Emit one XP notification per qualifying diff update with source metadata and `expectedXP` remaining field.
+  - Apply deterministic per-type color tokens to notification rows for quick visual parsing.
+  - Bind notification row styling to fixed map: `XP blue`, `Task green`, `System red`, `Brief amber`.
+  - Render notification timestamps using conditional formatter: `<24h => relative`, `>=24h => absolute`.
+  - Implement notification row click handlers that route user to the linked domain tab/feed based on event type and payload target.
+  - Route into default/global feed state and apply transient highlight to the target record/event instead of forcing a narrowed hard filter.
+  - Add rollover guard: unresolved Evening Brief state persists across day boundary and gates Morning Brief entry.
+  - Add route-level redirect guard to `Capture` with forced Evening popup when Morning is blocked by prior-day unresolved evening state.
+  - Chain popup resolver: on carry-over days enforce ordered completion `Evening -> Morning` before enabling capture submit pipeline.
+  - Apply carry-over damage `-10` and carry-over skip damage `-30` in scoring pipeline for gate-related outcomes.
+  - Add conditional refund logic that restores carry damage (`+10`) after successful same-day completion of both carry-over gates.
+  - Implement global fixed bottom-center capture bar container in runtime shell layout.
+  - Keep floating capture bar mounted in shared runtime shell for all primary tab routes.
+  - Implement capture mode state machine with default `daily`, color-coded mode switching, and destination-aware persistence on submit.
+  - Release evening-gate write lock immediately after Evening Brief submit succeeds.
+  - Bind fixed keyboard shortcuts to category modes using underlined initial-letter hints in the floating bar UI.
+  - Add category-pill count model and active-feed state for Capture timeline (`all` + per-category views).
+  - Add right-side Capture metrics panel aligned with timeline filtering state.
+  - Implement deterministic metric pipeline for live compose counts, day totals, rolling 24h totals, 6h per-hour paired bars, and global prompt timeline cards.
+  - Use six closed hourly buckets for chart aggregation and maintain deterministic left-to-right render.
+  - Add `expectedXP` Morning Brief field and connect it to multiplier-eligibility evaluation hooks once baseline XP params are finalized.
+  - Validate Morning Brief `expectedXP` input within `0-1000`.
+  - Render `expectedXP` as a slider widget with deterministic min/max bounds.
+
 ## Decision Log
 - `2026-02-12`: Extend chatui/ instead of creating new project -> reuses all existing code (1390 lines of business logic, 766 lines of CSS, working API integration), avoids duplication, maintains monorepo build pipeline -> zero migration cost for existing features
 - `2026-02-12`: Use React Context + hooks instead of Redux/Zustand -> current state complexity (3 domains: status, game, capture) fits Context pattern well, avoids adding state management dependency, consistent with existing hooks-based architecture -> simpler mental model
@@ -457,3 +780,4 @@ Single source of truth for product intent, scope, architecture, integrations, UX
 - `2026-02-12`: Interview round 13 finalized MVP Jarvis observability baseline (`indicator + basic steps`) -> gives operator confidence without heavy trace UI complexity -> requires lightweight processing-state stream in dashboard.
 - `2026-02-12`: Interview round 14 locked context-first interview protocol -> decisions must be grounded in shared mechanics and current implementation to avoid low-context guessing -> requires contextual prompt template in next rounds.
 - `2026-02-12`: Interview round 14 locked internal EEU economy with damped conversion, delta-progress claims, and 3-tier shop -> enables crypto-style performance economy without blockchain complexity -> requires additive `/api/capture` and `/api/status` payload extensions plus local ledger/event storage.
+  - Floating capture bar placement: `1` => always fixed bottom-center globally (desktop baseline matches provided design reference).
