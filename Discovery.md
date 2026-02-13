@@ -457,3 +457,49 @@ Single source of truth for product intent, scope, architecture, integrations, UX
 - `2026-02-12`: Interview round 13 finalized MVP Jarvis observability baseline (`indicator + basic steps`) -> gives operator confidence without heavy trace UI complexity -> requires lightweight processing-state stream in dashboard.
 - `2026-02-12`: Interview round 14 locked context-first interview protocol -> decisions must be grounded in shared mechanics and current implementation to avoid low-context guessing -> requires contextual prompt template in next rounds.
 - `2026-02-12`: Interview round 14 locked internal EEU economy with damped conversion, delta-progress claims, and 3-tier shop -> enables crypto-style performance economy without blockchain complexity -> requires additive `/api/capture` and `/api/status` payload extensions plus local ledger/event storage.
+
+### `2026-02-12` NextUI Round 1: Scope Lock
+- User inputs:
+  - Primary MVP Goal: `A` (Journaling-first / Perfect Capture).
+- Round summary:
+  - The focus for the NextUI baseline is on building a high-frequency, reliable, and interactive capture experience before expanding to other dashboard metrics.
+
+### `2026-02-12` NextUI Round 2: Capture Mechanics Lock
+- User inputs:
+  - Architecture: Bottom-anchored context window.
+  - Controls: Explicit category buttons below input (`capture`, `log`, `daily`, `tasks`).
+  - Feedback: Dynamic frame color change based on selected category.
+  - Persistence: Category selection maps to specific storage locations (JSON folders/files).
+- Round summary:
+  - Transition from automatic morphing to explicit user-driven categorization via button bar for high intent clarity.
+
+### `2026-02-12` NextUI Round 3: UX Interaction Lock
+- User inputs:
+  - Shortcuts: `Cmd + [First Letter]` with underlined labels.
+  - Navigation: `Tab` cycling.
+  - Automation: Slash command auto-switch based on prefix.
+  - Visual: Dynamic border/shadow color sync.
+
+### `2026-02-12` NextUI Round 4: Post-Submission & State Feedback
+- User inputs:
+  - Feedback: History Feed (above) + Liveness Stream (below).
+
+### `2026-02-12` NextUI Round 5: Error Handling
+- User inputs:
+  - Error Handling: `C` (Toast & Shake).
+- Round summary:
+  - The input bar shakes on error, showing a red toast, while preserving text in the input for manual retry.
+
+### `2026-02-12` NextUI Round 3: UX Behavior Lock
+- User inputs:
+  - Shortcuts: `Cmd + [First Letter]` (e.g., `Cmd+L` for Log).
+  - Visual Cue: Underlined first letter in category labels.
+  - Navigation: `Tab` key cycles through categories.
+  - Automation: Slash commands (e.g., `/task`) trigger category auto-switch.
+  - Feedback: Dynamic frame border or shadow color change on interaction.
+- Round summary:
+  - The interaction model is designed for high-speed, no-mouse operations while providing clear, color-coded visual feedback.
+- Locked decisions:
+  - `BottomCaptureBar` will implement keyboard listeners for `Cmd+Key` and `Tab`.
+  - CSS implementation of underlined shortcuts in labels.
+  - `activeCategory` state transition triggered by slash prefix detection in the main input.

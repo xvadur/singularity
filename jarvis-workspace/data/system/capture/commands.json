@@ -8,13 +8,13 @@
       "source": "legacy-ui",
       "threadId": "1770890435580",
       "sessionKey": "agent:main:webchat:1770890435580",
-      "status": "pending",
+      "status": "completed",
       "createdAt": "2026-02-12T10:00:47.525Z"
     }
   ],
   "stats": {
     "totalQueued": 1,
-    "pending": 1,
+    "pending": 0,
     "byCommand": {
       "log": 1
     },

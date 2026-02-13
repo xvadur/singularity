@@ -6,7 +6,8 @@
       "content": "/log nespal som celu noc",
       "source": "legacy-ui",
       "capturedAt": "2026-02-12T10:00:47.525Z",
-      "processed": false,
+      "processed": true,
+      "processedAt": "2026-02-13T06:46:00.000Z",
       "priority": "medium",
       "tags": [
         "legacy-ui"
@@ -26,7 +27,8 @@
       "content": "a nmozno by potom stacilo len menit tagy?",
       "source": "chatui",
       "capturedAt": "2026-02-12T05:33:18.855Z",
-      "processed": false,
+      "processed": true,
+      "processedAt": "2026-02-13T06:46:00.000Z",
       "priority": "critical",
       "tags": [
         "test.tagSelection"
@@ -48,7 +50,8 @@
       "content": "a teraz to neni na wqureste a to je popici, ked budu spravne parametre, tak to bude akurat cele \na este ked tuto v content sekcii bude pekny markdown tak to bude este lepsie",
       "source": "chatui",
       "capturedAt": "2026-02-12T05:32:28.116Z",
-      "processed": false,
+      "processed": true,
+      "processedAt": "2026-02-13T06:46:00.000Z",
       "priority": "critical",
       "tags": [
         "test"
@@ -70,7 +73,8 @@
       "content": "a na toto naviazem quest na boss",
       "source": "chatui",
       "capturedAt": "2026-02-12T05:31:40.278Z",
-      "processed": false,
+      "processed": true,
+      "processedAt": "2026-02-13T06:46:00.000Z",
       "priority": "critical",
       "tags": [
         "test"
@@ -92,7 +96,8 @@
       "content": "cize toto je boss",
       "source": "chatui",
       "capturedAt": "2026-02-12T05:30:48.587Z",
-      "processed": false,
+      "processed": true,
+      "processedAt": "2026-02-13T06:46:00.000Z",
       "priority": "critical",
       "tags": [
         "test"
@@ -114,7 +119,8 @@
       "content": "mame aktivny aj system nonitor \ncize toto by som mohol pouzivat na to aby som sem zapisal veci ktory chcem sprqvit a prisudim im parametre",
       "source": "chatui",
       "capturedAt": "2026-02-12T05:30:03.290Z",
-      "processed": false,
+      "processed": true,
+      "processedAt": "2026-02-13T06:46:00.000Z",
       "priority": "critical",
       "tags": [
         "test"
@@ -136,7 +142,8 @@
       "content": "ano task funguje, to by znamenalo ze ja si kazdy na toto mozem naviazat kvantitativne metriky",
       "source": "chatui",
       "capturedAt": "2026-02-12T05:28:40.004Z",
-      "processed": false,
+      "processed": true,
+      "processedAt": "2026-02-13T06:46:00.000Z",
       "priority": "critical",
       "tags": [
         "test"
@@ -158,7 +165,8 @@
       "content": "dashboard funguje",
       "source": "chatui",
       "capturedAt": "2026-02-12T05:27:50.865Z",
-      "processed": false,
+      "processed": true,
+      "processedAt": "2026-02-13T06:46:00.000Z",
       "priority": "critical",
       "tags": [
         "test"
@@ -180,7 +188,8 @@
       "content": "testujem tiket system",
       "source": "chatui",
       "capturedAt": "2026-02-12T05:27:21.405Z",
-      "processed": false,
+      "processed": true,
+      "processedAt": "2026-02-13T06:46:00.000Z",
       "priority": "critical",
       "tags": [
         "test"
@@ -209,8 +218,8 @@
       "log": 1
     },
     "totalCaptured": 9,
-    "processed": 0,
-    "pending": 9
+    "processed": 9,
+    "pending": 0
   },
   "settings": {}
 }

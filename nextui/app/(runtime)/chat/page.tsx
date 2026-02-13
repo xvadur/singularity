@@ -1,5 +1,5 @@
-import { RuntimeThread } from "../../../components/runtime-thread";
+import { DailyJournalStream } from "../../../components/chat/DailyJournalStream";
 
 export default function ChatPage() {
-  return <RuntimeThread />;
+  return <DailyJournalStream />;
 }

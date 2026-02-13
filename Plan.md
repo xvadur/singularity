@@ -41,16 +41,13 @@ Polished synthesis from Discovery + Research into a concrete execution blueprint
   - Prepare Next target in phased parity migration (`docs/nextjs-target-frame-blueprint.md`).
 
 ## Implementation Plan
-### Phase 1
+### Phase 1: Perfect Capture Lock
 - Deliverables:
-  - shared context docs:
-    - `docs/habitica-mechanics-primer.md`
-    - `docs/current-singularity-reality-snapshot.md`
-    - `docs/nextjs-target-frame-blueprint.md`
-    - `docs/discovery-interview-context-template.md`
-  - Discovery interview protocol lock (context-first).
-- Dependencies: Discovery + Research baseline.
-- Exit criteria: artifacts committed and referenced in ongoing interview flow.
+  - NextUI Discovery workflow lock.
+  - Capture behavior contract (Input mechanics, AI feedback, Slash command routing).
+  - Preliminary UI components for `/capture` (Command bar, Inbox preview).
+- Dependencies: Discovery interview completion.
+- Exit criteria: Capture UX locked and documented in `docs/nextui-ux-lock-v1.md`.
 
 ### Phase 2
 - Deliverables:
