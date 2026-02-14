@@ -6,7 +6,7 @@ Granular execution tracker: phases -> tasks -> subtasks with live status.
 ## Status
 - State: `active`
 - Owner: `All Agents`
-- Last Updated: `2026-02-12`
+- Last Updated: `2026-02-14`
 
 ## Rules
 - Every task must have an owner and status.
@@ -20,7 +20,7 @@ Granular execution tracker: phases -> tasks -> subtasks with live status.
 - `[!]` blocked
 
 ## Phase 1: Foundation
-- [-] Define final product goals from interview
+- [x] Define final product goals from interview
 - [ ] Lock architecture boundaries
 - [ ] Confirm integration contracts
 
@@ -47,6 +47,53 @@ Granular execution tracker: phases -> tasks -> subtasks with live status.
 - [!] None
 
 ## Daily Log
+- `2026-02-14`: Completed task: created 7 draft execution PRs on GitHub (`#8`-`#14`) from the final implementation split for parallel Codex + Claude delivery.
+- `2026-02-14`: Started task: create 7 staged execution PRs on GitHub from `docs/final-master-spec-2026-02-14.md` with dependency-aware slicing.
+- `2026-02-14`: Completed task: produced implementation execution recommendation to split `docs/final-master-spec-2026-02-14.md` into staged, reviewable PR slices for parallel Codex + Claude delivery.
+- `2026-02-14`: Started task: derive PR slicing strategy from final master spec for parallel implementation with Claude, including dependency and ownership split.
+- `2026-02-14`: Completed task: saved approved final implementation plan to `docs/final-master-spec-2026-02-14.md`; ready to start implementation from a new conversation.
+- `2026-02-14`: Started task: persist approved final implementation plan into repository docs for handoff to next implementation conversation.
+- `2026-02-14`: Started task: collect final implementation materials and produce final documentation + execution planning package after Interview Round 18 closure.
+- `2026-02-14`: Completed task: finalized final implementation interview (`50/50` decisions locked) and captured completion criteria (`go-implement` requires full closure).
+- `2026-02-14`: Completed task: synced Interview Round 18 decisions Q1-Q50 into `Discovery.md` with summary and implementation impacts.
+- `2026-02-14`: Completed task: run final 50-question implementation interview in phased mode based on `docs/final-implementation-handoff-2026-02-14.md`.
+- `2026-02-14`: Completed task: synced final interview decisions Q1-Q32 into `Discovery.md` as Interview Round 18 (in progress, partial capture).
+- `2026-02-14`: Completed task: facilitated phased final implementation interview in single-question ABCD mode through Q24 decisions (gate/carry, capture/timeline, command scheduler contract), preparing continuation for remaining questions.
+- `2026-02-14`: Started task: run final 50-question implementation interview in phased ABCD mode based on `docs/final-implementation-handoff-2026-02-14.md`.
+- `2026-02-14`: Completed task: added implementation-spec markdown for XP engine at `docs/xpčka/XP-Engine-v2-Implementation-Scaffold.md`; build passed.
+- `2026-02-14`: Started task: create implementation specification markdown for XP engine in `docs/xpčka` aligned with locked Discovery contracts.
+- `2026-02-13`: Completed task: created final implementation handoff doc for new conversation (`docs/final-implementation-handoff-2026-02-14.md`) with UX polish scope, locked contracts, execution phases, acceptance checklist, and paste-ready kickoff prompt.
+- `2026-02-13`: Started task: prepare final implementation handoff document for next conversation (UX polish + Pencil execution + XP contract alignment).
+- `2026-02-13`: Completed task: created official XP Engine v2 markdown documentation (`docs/xp-engine-v2-official.md`) with formulas, invariants, anti-gaming rules, rollout, and implementation contract; build passed.
+- `2026-02-13`: Started task: synthesize XP research artifacts into official XP Engine v2 documentation (how it works + implementation contract).
+- `2026-02-13`: Completed task: produced implementation-ready technical scaffold for unified personal XP engine (domain boundaries, contracts, state machines, determinism, rollout, observability, risk mitigations); build passed.
+- `2026-02-13`: Started task: produce implementation-ready technical scaffold for unified personal XP engine (domain boundaries, contracts, state machines, determinism, rollout, observability, risks).
+- `2026-02-13`: Completed task: locked Interview v2 notification destination mapping (`Task/Brief/XP/System`) and deep-link anchor requirement to concrete referenced message(s).
+- `2026-02-13`: Started task: capture Interview v2 rule for notification type->tab mapping and mandatory jump to referenced feed record(s).
+- `2026-02-13`: Completed task: locked Interview v2 notification-highlight persistence (`explicit clear only`) and reflected it in Discovery Round 17.
+- `2026-02-13`: Started task: capture Interview v2 decision for Notification Center highlight duration.
+- `2026-02-13`: Completed task: refined Interview v2 notification navigation behavior to open global feed and highlight the target event/entity (no strict filter lock).
+- `2026-02-13`: Started task: capture Interview v2 clarification for post-click Notification Center routing/highlight semantics.
+- `2026-02-13`: Completed task: locked Interview v2 notification click behavior (`row click -> contextual tab/feed navigation`) and reflected it in Discovery Round 17.
+- `2026-02-13`: Started task: capture Interview v2 decision for Notification Center row click interaction.
+- `2026-02-13`: Completed task: locked Interview v2 notification timestamp policy (`<24h relative`, `>=24h absolute`) and reflected it in Discovery Round 17.
+- `2026-02-13`: Started task: capture Interview v2 correction for notification timestamp rendering format.
+- `2026-02-13`: Completed task: locked carry-over gate sequence in Interview v2 (`Evening` then `Morning` on first write intent, with temporary outside-click dismiss and mandatory re-open on next write attempt).
+- `2026-02-13`: Completed task: corrected Interview v2 brief-card visibility to concurrent Morning+Evening cards on Dashboard with `03:00 local` day-rotation boundary.
+- `2026-02-13`: Completed task: locked Interview v2 brief-card placement correction (Morning + Evening cards dashboard-only, timeline pinning removed).
+- `2026-02-13`: Completed task: consolidated duplicate Evening popup rules in Discovery Interview v2 into one canonical behavior statement.
+- `2026-02-13`: Completed task: captured Interview v2 design input in Discovery (floating capture bar model, 3-tab focus, capture day-log semantics, category quick actions, Evening Brief gate after 20:00).
+- `2026-02-13`: Started task: run Discovery Interview v2 focused on Pencil-designed UI iteration (`Jarvis_Singularity.pen`) and lock design-first decisions.
+- `2026-02-13`: Completed task: verified MCP Pencil active editor is `/Users/_xvadur/singularity/Jarvis_Singularity.pen` and switched workflow to scaffold-first mode before direct execution.
+- `2026-02-13`: Started task: scaffold-first verification for MCP Pencil target document (`Jarvis_Singularity.pen`) before implementation execution.
+- `2026-02-13`: Started task: synthesize Round 16 Discovery decisions into updated `Research.md` and `Plan.md`, then begin full-scope v1 implementation track.
+- `2026-02-13`: Completed task: finished rapid 30-question Discovery interview (Round 16) and locked full-scope acceptance (all core flows included).
+- `2026-02-13`: Started task: run rapid ABCD Discovery interview mode (30 questions), continuously capture decisions into Discovery, then synthesize Research -> Plan -> implementation.
+- `2026-02-13`: Started task: run collaborative Discovery interview using context-template format (Habitica baseline -> Jarvis current -> implementation impact) and record decisions into framework docs.
+- `2026-02-13`: Completed task: reviewed `docs/discovery-interview-opening-handoff-2026-02-13.md` and confirmed it is ready as the Discovery kickoff handoff.
+- `2026-02-13`: Started task: review `docs/discovery-interview-opening-handoff-2026-02-13.md` and align with framework docs (`Discovery.md`, `Research.md`, `Plan.md`, `Progress.md`).
+- `2026-02-13`: Completed task: created interview opening handoff `docs/discovery-interview-opening-handoff-2026-02-13.md` with locked decisions, 4-phase framework, 30-minute question script, and kickoff prompt for new Discovery conversation.
+- `2026-02-13`: Started task: prepare interview opening handoff document for new Discovery framework conversation (ultimate schema + Jarvis review baseline).
 - `2026-02-12`: Completed task: cleaned `main` for dual-track migration workflow, committed Next UI baseline, and created separate backend/design branches for parallel implementation.
 - `2026-02-12`: Started task: prepare branch strategy and clean `main` for split execution (Codex backend stream + Antigravity design stream).
 - `2026-02-12`: Completed task: implemented `untitled.pen` UX baseline in `nextui` (`/`, `/chat`, `/tasks`, `/capture`) with shared runtime sidebar shell and preserved API parity route `/api/status`; builds passed.

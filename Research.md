@@ -6,7 +6,7 @@ Evidence base for implementation decisions. Every claim should map to a source, 
 ## Status
 - State: `in_progress`
 - Owner: `Main Agent (Codex)`
-- Last Updated: `2026-02-12`
+- Last Updated: `2026-02-13`
 
 ## Research Tracks
 - Track A: Habitica game loop extraction (task model, scoring, progression)
@@ -65,6 +65,20 @@ Evidence base for implementation decisions. Every claim should map to a source, 
 - Source: `/Users/_xvadur/singularity/references/habitica/website/server/libs/cron.js`, `/Users/_xvadur/singularity/references/habitica/website/common/script/cron.js`
 - Applicability: Useful for Jarvis "end-of-day / missed commitments" mechanics if enabled in MVP+1.
 
+### Track F (Interview Round 16 Contract Evidence)
+- Finding: Morning Brief is now a hard UX/runtime gate with explicit skip path (required reason), strict content limits, and persistence in the same brief stream.
+- Source: `/Users/_xvadur/singularity/Discovery.md` (`2026-02-13` Interview Round 16 section).
+- Applicability: Implement as deterministic validation/state machine in UI + persistence adapters; avoid separate skip-only storage.
+- Finding: KPI behavior is contract-locked to `60s` refresh cadence with short-interval diff semantics and tri-state coloring.
+- Source: `/Users/_xvadur/singularity/Discovery.md` (`2026-02-13` Interview Round 16 section).
+- Applicability: Requires previous-snapshot cache in app shell and stable diff rendering across route changes.
+- Finding: Command execution observability and recovery are lock-defined (`Accepted -> Plan -> Execution -> Measurement -> Done`, auto-retry every `30s`, hard cap `20`, then `failed-final` + manual retry).
+- Source: `/Users/_xvadur/singularity/Discovery.md` (`2026-02-13` Interview Round 16 section).
+- Applicability: Requires explicit command lifecycle enum + retry counter in runtime state, with local failure presentation.
+- Finding: Task promote flow defaults are lock-defined (`Todo`, `Medium`) and inbox ordering remains recency-first with optional manual reorder override.
+- Source: `/Users/_xvadur/singularity/Discovery.md` (`2026-02-13` Interview Round 16 section).
+- Applicability: Implement predictable defaults first, then add reorder persistence without breaking fast-path promote.
+
 ## Technical Notes
 - Benchmarks: Not run yet (code reading pass only).
 - Experiments: Not run yet (next step is deterministic replay tests for extracted scoring rules).
@@ -86,6 +100,9 @@ Evidence base for implementation decisions. Every claim should map to a source, 
 - Decision: Add cron lock/idempotency semantics in Jarvis processing similar to Habitica cron wrapper.
 - Why: Prevent duplicate processing under concurrent requests.
 - Expected impact: Higher runtime reliability.
+- Decision: Implement Round 16 contracts as first-class product invariants before visual polish.
+- Why: The interview locked behavioral acceptance for all four core flows and v1 sign-off requires full scope.
+- Expected impact: Reduces rework and contract drift during implementation.
 
 ## Gaps
 - Missing evidence:
@@ -97,3 +114,4 @@ Evidence base for implementation decisions. Every claim should map to a source, 
 
 ## Research Log
 - `2026-02-12`: Habitica extraction pass 1 -> forked and mapped core mechanics + cron + quest flow -> next action: define Jarvis domain module spec and migration tasks in Plan.md.
+- `2026-02-13`: Round 16 synthesis -> translated rapid 30-question contract locks into implementation evidence for Morning Brief, KPI diffs, command lifecycle/retry, and task promote defaults.
