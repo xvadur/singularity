@@ -1090,7 +1090,13 @@ async function fetchStatusData() {
         todayLog: { path: todayLogPath, exists: todayLogExists }
       },
       economy: economySnapshot,
-      overview
+      overview,
+
+      // PR-01: Additive fields for v2 contract (null defaults until engines are wired)
+      xpEngine: null,
+      briefGates: null,
+      kpiDiff: null,
+      activityFeedMeta: null
     };
   } catch (error) {
     console.error('Error fetching status data:', error);
@@ -1294,7 +1300,15 @@ app.post('/api/capture', (req, res) => {
     // Invalidate cache so the dashboard updates immediately.
     cache.timestamp = 0;
 
-    return res.json({ ok: true, item: newItem, queuedCommand, economyEffect, shopPurchase, economy });
+    return res.json({
+      ok: true, item: newItem, queuedCommand, economyEffect, shopPurchase, economy,
+
+      // PR-01: Additive fields for v2 contract (null defaults until engines are wired)
+      xpEngineEffect: null,
+      gateStateAfter: null,
+      notificationCandidates: [],
+      flowFlagsApplied: null
+    });
   } catch (error) {
     console.error('Capture Error:', error);
     return res.status(500).json({
